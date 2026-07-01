@@ -131,7 +131,7 @@ class SettingsScreen extends ConsumerWidget {
           const ListTile(
             leading: Icon(Icons.android),
             title: Text('Aplikacja'),
-            subtitle: Text('Słowenia 2026 v1.0.0'),
+            subtitle: Text('Plan Podróży'),
           ),
         ],
       ),
@@ -175,7 +175,7 @@ class SettingsScreen extends ConsumerWidget {
         final file = File('${dir.path}/$fileName');
         await file.writeAsString(json);
         await Share.shareXFiles([XFile(file.path)],
-            subject: 'Plan wyjazdu — Słowenia 2026');
+            subject: 'Plan podróży (eksport)');
       }
     } catch (e) {
       if (context.mounted) _toast(context, 'Błąd eksportu: $e');

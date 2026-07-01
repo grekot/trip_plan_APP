@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "pl.grkotarba" "\0"
-            VALUE "FileDescription", "Słowenia 2026 - interaktywny plan wyjazdu" "\0"
+            VALUE "FileDescription", "Plan Podróży - interaktywny plan wyjazdu" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "slowenia_app" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 pl.grkotarba. All rights reserved." "\0"
             VALUE "OriginalFilename", "slowenia_app.exe" "\0"
-            VALUE "ProductName", "Słowenia 2026" "\0"
+            VALUE "ProductName", "Plan Podróży" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

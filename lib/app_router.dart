@@ -10,6 +10,7 @@ import 'screens/conversations_screen.dart';
 import 'screens/gorges_screen.dart';
 import 'screens/emergency_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/plan_library_screen.dart';
 import 'screens/trip_meta_edit_screen.dart';
 import 'screens/extras_edit_screen.dart';
 import 'screens/side_sections_edit_screen.dart';
@@ -56,6 +57,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (ctx, st) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/library',
+      builder: (ctx, st) => const PlanLibraryScreen(),
     ),
     // ===== Edit routes =====
     GoRoute(

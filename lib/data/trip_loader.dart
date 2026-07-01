@@ -1,8 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/trip_models.dart';
+
+/// Rzucane, gdy nie ma wybranego (aktywnego) planu — apka pokazuje wtedy
+/// ekran startowy kierujący do Biblioteki planów.
+class NoActivePlanException implements Exception {
+  const NoActivePlanException();
+  @override
+  String toString() => 'Brak aktywnego planu';
+}
 
 class TripLoadResult {
   final Trip trip;
@@ -10,45 +18,86 @@ class TripLoadResult {
   TripLoadResult(this.trip, {this.warning});
 }
 
+/// Ładowanie/zapisywanie planów w modelu WIELOPLANOWYM.
+///
+/// Plany (odszyfrowane, jawne) leżą w `documents/plans/<id>.json`. Aktywny plan
+/// wskazuje klucz `activePlanId` w Hive `box_settings`. Nie ma już bundled
+/// `assets/trip.json` — plany pobiera się z chmury (repo trip_plans) przez
+/// PlanLibraryService.
 class TripLoader {
-  static const String _assetPath = 'assets/trip.json';
-  static const String _fileName = 'trip.json';
+  static const String _boxSettings = 'box_settings';
+  static const String _activeKey = 'activePlanId';
 
-  static Future<File> _writableFile() async {
+  static Future<Directory> plansDir() async {
     final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/$_fileName');
+    final d = Directory('${dir.path}/plans');
+    if (!await d.exists()) await d.create(recursive: true);
+    return d;
   }
 
-  static Future<TripLoadResult> load() async {
-    final file = await _writableFile();
-    if (!await file.exists()) {
-      final assetText = await rootBundle.loadString(_assetPath);
-      await file.writeAsString(assetText);
+  static Future<File> planFile(String id) async {
+    final d = await plansDir();
+    return File('${d.path}/$id.json');
+  }
+
+  static String? activePlanId() {
+    if (!Hive.isBoxOpen(_boxSettings)) return null;
+    final v = Hive.box(_boxSettings).get(_activeKey);
+    return v is String && v.isNotEmpty ? v : null;
+  }
+
+  static Future<void> setActivePlanId(String? id) async {
+    final box = Hive.box(_boxSettings);
+    if (id == null) {
+      await box.delete(_activeKey);
+    } else {
+      await box.put(_activeKey, id);
     }
+  }
+
+  /// Ładuje aktywny plan. Rzuca [NoActivePlanException], gdy nic nie wybrano
+  /// lub plik zniknął.
+  static Future<TripLoadResult> load() async {
+    final id = activePlanId();
+    if (id == null) throw const NoActivePlanException();
+    final file = await planFile(id);
+    if (!await file.exists()) throw const NoActivePlanException();
     final text = await file.readAsString();
     final json = jsonDecode(text) as Map<String, dynamic>;
     return TripLoadResult(Trip.fromJson(json));
   }
 
+  /// Zapisuje edytowany plan do pliku aktywnego planu.
   static Future<void> save(Trip trip) async {
-    final file = await _writableFile();
+    final id = activePlanId();
+    if (id == null) return;
+    final file = await planFile(id);
     final encoder = const JsonEncoder.withIndent('  ');
     await file.writeAsString(encoder.convert(trip.toJson()));
+  }
+
+  /// Zapisuje surowy JSON planu pod danym id (używane przy pobieraniu z chmury
+  /// lub imporcie z pliku). Waliduje schemat.
+  static Future<void> savePlanJson(String id, String jsonText) async {
+    final decoded = jsonDecode(jsonText);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Plan nie jest obiektem JSON.');
+    }
+    final issues = validateSchema(decoded);
+    if (issues.isNotEmpty) throw FormatException(issues.first);
+    final file = await planFile(id);
+    final encoder = const JsonEncoder.withIndent('  ');
+    await file.writeAsString(encoder.convert(decoded));
+  }
+
+  static Future<void> deletePlanFile(String id) async {
+    final file = await planFile(id);
+    if (await file.exists()) await file.delete();
   }
 
   static Future<String> exportJsonString(Trip trip) async {
     final encoder = const JsonEncoder.withIndent('  ');
     return encoder.convert(trip.toJson());
-  }
-
-  /// Przywraca domyślny plan z bundled asseta — nadpisuje writeable kopię.
-  /// Zwraca załadowany Trip z domyślnego asseta.
-  static Future<Trip> restoreDefault() async {
-    final assetText = await rootBundle.loadString(_assetPath);
-    final file = await _writableFile();
-    await file.writeAsString(assetText);
-    final json = jsonDecode(assetText) as Map<String, dynamic>;
-    return Trip.fromJson(json);
   }
 
   static Future<TripImportResult> importFromString(String jsonText) async {

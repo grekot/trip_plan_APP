@@ -29,6 +29,11 @@ dependencies:
   # Windows: fallback do otwarcia strony releases w przeglądarce.
   ota_update: ^7.1.0
   package_info_plus: ^8.0.2
+  # Szyfrowanie planów pobieranych z publicznego repo trip_plans:
+  # AES-256-GCM + klucz z hasła (PBKDF2). cryptography = czysty Dart (działa też
+  # w narzędziu tool/encrypt_plan.dart). Hasło trzymane w secure storage.
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.2
 
 dev_dependencies:
   flutter_lints: ^4.0.0
@@ -36,8 +41,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/trip.json
+  # Brak bundled planu — plany pobiera się z chmury (repo trip_plans) i trzyma
+  # jako pobrane pliki w documents/plans/. assets/icon/ jest używane tylko przez
+  # flutter_launcher_icons przy generowaniu ikon (nie jako runtime asset).
 
 # Konfiguracja flutter_launcher_icons: generuje ikony launchera dla Androida
 # (legacy mipmap + adaptive icon) oraz .ico dla Windows na podstawie pliku

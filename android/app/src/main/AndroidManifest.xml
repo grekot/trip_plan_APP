@@ -5,7 +5,7 @@
     <!-- Wymagane przez ota_update — uruchamia systemowego instalatora APK po pobraniu. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
-        android:label="Słowenia 2026"
+        android:label="Plan Podróży"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

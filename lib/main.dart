@@ -30,7 +30,7 @@ class SloweniaApp extends ConsumerWidget {
 
     // Tytuł i kolor wiodący są ładowane z trip.json. Jeśli plan jeszcze
     // się nie załadował lub nie podaje swoich wartości — używamy fallbacków.
-    final title = trip?.title ?? 'Plan wycieczki';
+    final title = trip?.title ?? 'Plan Podróży';
     final themeMap = trip?.practical['theme'] as Map?;
     final seedColor = _parseHexColor(themeMap?['primaryColor'] as String?) ?? AppTheme.defaultSeed;
 

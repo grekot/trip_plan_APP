@@ -54,3 +54,6 @@ app.*.map.json
 # Windows build output
 /windows/flutter/ephemeral/
 
+# Pobrane/zbudowane APK — nie trzymamy binariów w repo (są w GitHub Releases)
+*.apk
+

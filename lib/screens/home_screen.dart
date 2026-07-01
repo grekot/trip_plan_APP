@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../data/trip_loader.dart';
 import '../providers/providers.dart';
 import '../widgets/progress_bar.dart';
 import 'day_detail_screen.dart';
@@ -33,10 +34,12 @@ class HomeScreen extends ConsumerWidget {
       drawer: const _AppDrawer(),
       body: tripA.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('Błąd wczytywania planu:\n$e', textAlign: TextAlign.center),
-        )),
+        error: (e, _) => e is NoActivePlanException
+            ? _noPlanPanel(context)
+            : Center(child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('Błąd wczytywania planu:\n$e', textAlign: TextAlign.center),
+              )),
         data: (trip) {
           if (settings.tripStartDate == null) {
             return _onboardingPanel(context, ref);
@@ -92,6 +95,32 @@ class HomeScreen extends ConsumerWidget {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _noPlanPanel(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.travel_explore, size: 64),
+          const SizedBox(height: 16),
+          const Text('Brak aktywnego planu',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text(
+            'Aby zacząć: ustaw hasło i pobierz plan podróży z chmury.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            icon: const Icon(Icons.cloud_download_outlined),
+            label: const Text('Otwórz Bibliotekę planów'),
+            onPressed: () => context.push('/library'),
+          ),
+        ],
       ),
     );
   }
@@ -211,7 +240,7 @@ class _AppDrawer extends ConsumerWidget {
     final trip = tripA.valueOrNull;
 
     // Tytuł apki w nagłówku drawera — z trip.json (fallback: 'Plan wycieczki').
-    final headerTitle = trip?.title ?? 'Plan wycieczki';
+    final headerTitle = trip?.title ?? 'Plan Podróży';
 
     // Mapa etykiet menu — może być nadpisana w `trip.practical.menu` (klucz =
     // route bez `/`, wartość = etykieta). Domyślnie polskie nazwy.
@@ -238,6 +267,7 @@ class _AppDrawer extends ConsumerWidget {
             _entry(context, Icons.water_outlined, label('gorges', 'Wąwozy'), '/gorges'),
             _entry(context, Icons.phone_in_talk_outlined, label('emergency', 'Awaryjne'), '/emergency'),
             const Divider(),
+            _entry(context, Icons.library_books_outlined, label('library', 'Biblioteka planów'), '/library'),
             _entry(context, Icons.settings_outlined, label('settings', 'Ustawienia'), '/settings'),
           ],
         ),

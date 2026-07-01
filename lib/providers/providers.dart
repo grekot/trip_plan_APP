@@ -36,9 +36,11 @@ class TripNotifier extends StateNotifier<AsyncValue<Trip>> {
 
   Future<void> replace(Trip t) async => _commit(t);
 
-  Future<void> restoreDefault() async {
-    final t = await TripLoader.restoreDefault();
-    state = AsyncValue.data(t);
+  /// Przeładowuje aktywny plan z dysku (po zmianie aktywnego planu, pobraniu
+  /// nowego z chmury albo usunięciu bieżącego).
+  Future<void> reload() async {
+    state = const AsyncValue.loading();
+    await _load();
   }
 
   // ===== Helpers to build a new Trip with one field changed =====
