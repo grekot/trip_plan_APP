@@ -18,7 +18,10 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "pl.grkotarba.slowenia_app"
-    compileSdk = flutter.compileSdkVersion
+    // Przypięte jawnie (nie flutter.compileSdkVersion) — plugin ota_update ciągnie
+    // androidx.core:1.16.0 wymagający compileSdk 35+. CI z innym stable Fluttera
+    // mógłby mieć niższy domyślny → build fail. 36 spełnia wymóg pluginu.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -34,8 +37,10 @@ android {
 
     defaultConfig {
         applicationId = "pl.grkotarba.slowenia_app"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // Przypięte jawnie — ota_update wymaga minSdk 23. Ustawiamy 24 (Android 7.0,
+        // rozsądny floor 2026) niezależnie od domyślnego flutter.minSdkVersion na CI.
+        minSdk = 24
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
