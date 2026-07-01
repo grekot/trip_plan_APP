@@ -1,8 +1,16 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/plan_providers.dart';
 import '../services/passphrase_store.dart';
 import '../services/plan_library_service.dart';
+import 'qr_scan_screen.dart';
+
+bool get _canScanQr {
+  if (kIsWeb) return false;
+  return Platform.isAndroid || Platform.isIOS;
+}
 
 /// Biblioteka planów: ustawienie hasła, pobieranie zaszyfrowanych planów
 /// z chmury (repo trip_plans), wybór aktywnego i usuwanie pobranych.
@@ -69,6 +77,31 @@ class _PlanLibraryScreenState extends ConsumerState<PlanLibraryScreen> {
                   ),
                 ),
               ),
+              if (_canScanQr) ...[
+                const SizedBox(height: 10),
+                Row(children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('albo', style: TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  ),
+                  const Expanded(child: Divider()),
+                ]),
+                const SizedBox(height: 6),
+                FilledButton.tonalIcon(
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Skanuj kod QR'),
+                  onPressed: () async {
+                    final scanned = await Navigator.of(ctx).push<String>(
+                      MaterialPageRoute(builder: (_) => const QrScanScreen()),
+                    );
+                    if (scanned != null && scanned.trim().isNotEmpty) {
+                      ctl.text = scanned.trim();
+                      setD(() {});
+                    }
+                  },
+                ),
+              ],
             ],
           ),
           actions: [

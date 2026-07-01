@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Wymagane przez ota_update — uruchamia systemowego instalatora APK po pobraniu. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Skanowanie kodu QR z hasłem (mobile_scanner). Kamera nie jest wymagana
+         sprzętowo — apka działa też bez niej (wpisanie hasła ręcznie). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Plan Podróży"
         android:name="${applicationName}"
