@@ -50,22 +50,23 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
-      - name: Build APK (release, podpisany)
+      - name: Build APK (release, podpisany, UNIWERSALNY)
+        # Uniwersalny (fat) APK zawiera wszystkie ABI (arm64/arm32/x64) w jednym pliku.
+        # KLUCZOWE dla OTA: serwis pobiera pierwszy asset .apk z Release — jeden uniwersalny
+        # plik eliminuje ryzyko, że apka na arm64 pobierze wersję arm32. ~6 MB większy niż
+        # split, ale zawsze poprawny na każdym urządzeniu.
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then VERSION="0.0.0-dev"; fi
           flutter build apk --release \
-            --split-per-abi \
             --build-name="$VERSION" \
             --build-number="${GITHUB_RUN_NUMBER}"
 
-      - name: Zbierz APK-i pod nazwą wersji
+      - name: Zbierz APK pod nazwą wersji
         if: github.ref_type == 'tag'
         run: |
           mkdir -p release-artifacts
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk    "release-artifacts/slowenia-app-${GITHUB_REF_NAME}-arm64.apk"
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk  "release-artifacts/slowenia-app-${GITHUB_REF_NAME}-arm32.apk"
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk       "release-artifacts/slowenia-app-${GITHUB_REF_NAME}-x64.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk  "release-artifacts/slowenia-app-${GITHUB_REF_NAME}.apk"
           ls -la release-artifacts
 
       - name: Utwórz GitHub Release z APK-ami

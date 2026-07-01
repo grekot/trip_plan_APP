@@ -78,19 +78,32 @@ class OtaService {
       final body = data['body'] as String?;
       final htmlUrl = data['html_url'] as String?;
 
-      // Wybierz pierwszy asset z .apk.
+      // Wybór APK z assetów Release. Workflow publikuje jeden uniwersalny APK,
+      // ale gdyby w Release było kilka plików (np. ktoś ręcznie wgrał split-per-abi),
+      // preferujemy w kolejności: uniwersalny (bez sufiksu ABI) → arm64 → cokolwiek .apk.
+      // To chroni urządzenia arm64 (np. Samsung S23) przed pobraniem wersji arm32.
       String? apkUrl;
       final assets = data['assets'];
       if (assets is List) {
+        String? universalUrl, arm64Url, anyApkUrl;
         for (final a in assets) {
-          if (a is Map<String, dynamic>) {
-            final name = a['name'] as String?;
-            if (name != null && name.toLowerCase().endsWith('.apk')) {
-              apkUrl = a['browser_download_url'] as String?;
-              break;
-            }
+          if (a is! Map<String, dynamic>) continue;
+          final name = (a['name'] as String?)?.toLowerCase();
+          final url = a['browser_download_url'] as String?;
+          if (name == null || url == null || !name.endsWith('.apk')) continue;
+          anyApkUrl ??= url;
+          if (name.contains('arm64') || name.contains('v8a')) {
+            arm64Url ??= url;
+          } else if (!name.contains('arm32') &&
+              !name.contains('armeabi') &&
+              !name.contains('v7a') &&
+              !name.contains('x86') &&
+              !name.contains('x64')) {
+            // Brak jakiegokolwiek sufiksu ABI → uniwersalny (fat) APK.
+            universalUrl ??= url;
           }
         }
+        apkUrl = universalUrl ?? arm64Url ?? anyApkUrl;
       }
 
       return UpdateInfo(
