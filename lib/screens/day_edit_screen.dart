@@ -106,7 +106,7 @@ class _DayEditScreenState extends ConsumerState<DayEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ref.watch(tripProvider).value;
+    final t = ref.watch(tripProvider).valueOrNull;
     if (t == null || widget.dayIdx >= t.days.length) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

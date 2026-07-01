@@ -11,7 +11,7 @@ class PackingEditScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(tripProvider).value;
+    final t = ref.watch(tripProvider).valueOrNull;
     if (t == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return Scaffold(
       appBar: AppBar(
@@ -119,7 +119,7 @@ class EmergencyEditScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(tripProvider).value;
+    final t = ref.watch(tripProvider).valueOrNull;
     if (t == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return Scaffold(
       appBar: AppBar(
@@ -199,7 +199,7 @@ class ContingencyEditScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(tripProvider).value;
+    final t = ref.watch(tripProvider).valueOrNull;
     if (t == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return Scaffold(
       appBar: AppBar(

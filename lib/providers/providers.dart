@@ -608,7 +608,7 @@ final activeDayIndexProvider = Provider<int?>((ref) {
   final settings = ref.watch(settingsProvider);
   final tripA = ref.watch(tripProvider);
   if (settings.tripStartDate == null) return null;
-  final t = tripA.value;
+  final t = tripA.valueOrNull;
   if (t == null) return null;
   final today = DateTime.now();
   final today0 = DateTime(today.year, today.month, today.day);
@@ -621,7 +621,7 @@ final activeDayIndexProvider = Provider<int?>((ref) {
 final dayProgressProvider = Provider.family<double, String>((ref, dayId) {
   final tripA = ref.watch(tripProvider);
   final progress = ref.watch(progressProvider);
-  final t = tripA.value;
+  final t = tripA.valueOrNull;
   if (t == null) return 0.0;
   final day = t.days.firstWhere((d) => d.id == dayId,
       orElse: () => Day(

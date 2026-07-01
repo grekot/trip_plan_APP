@@ -1,7 +1,7 @@
 name: slowenia_app
 description: Interaktywny plan wyjazdu do Słowenii 2026
 publish_to: 'none'
-version: 1.0.6+7
+version: 1.0.7+8
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

@@ -107,7 +107,7 @@ class _SectionEditScreenState extends ConsumerState<SectionEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ref.watch(tripProvider).value;
+    final t = ref.watch(tripProvider).valueOrNull;
     if (t == null ||
         widget.dayIdx >= t.days.length ||
         widget.secIdx >= t.days[widget.dayIdx].sections.length) {

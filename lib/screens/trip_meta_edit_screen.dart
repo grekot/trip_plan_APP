@@ -19,7 +19,7 @@ class _TripMetaEditScreenState extends ConsumerState<TripMetaEditScreen> {
   @override
   void initState() {
     super.initState();
-    final t = ref.read(tripProvider).value;
+    final t = ref.read(tripProvider).valueOrNull;
     _titleCtl = TextEditingController(text: t?.title ?? '');
     _subtitleCtl = TextEditingController(text: t?.subtitle ?? '');
     _summaryCtl = TextEditingController(text: t?.summary ?? '');
@@ -47,7 +47,7 @@ class _TripMetaEditScreenState extends ConsumerState<TripMetaEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ref.watch(tripProvider).value;
+    final t = ref.watch(tripProvider).valueOrNull;
     if (t == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final scheme = Theme.of(context).colorScheme;
 
