@@ -1,0 +1,177 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/ai/agent_tools.dart';
+import '../services/ai/ai_client.dart';
+import '../services/ai/ai_settings_store.dart';
+import '../services/ai/ai_types.dart';
+import '../services/ai/anthropic_client.dart';
+import '../services/ai/deepseek_client.dart';
+import 'providers.dart';
+
+/// Czy asystent jest skonfigurowany (jest klucz API dla wybranego dostawcy)?
+/// Invalidowany po zapisie ustawień AI.
+final aiConfiguredProvider = FutureProvider<bool>((ref) async {
+  final cfg = await AiSettingsStore.getConfig();
+  return cfg.isValid;
+});
+
+/// Rodzaj wiadomości w czacie.
+enum ChatMsgKind { user, assistant, toolAction, error, info }
+
+class ChatMsg {
+  final ChatMsgKind kind;
+  final String text;
+  const ChatMsg(this.kind, this.text);
+}
+
+class AiChatState {
+  final List<ChatMsg> messages;
+  final bool busy;
+  const AiChatState({this.messages = const [], this.busy = false});
+
+  AiChatState copyWith({List<ChatMsg>? messages, bool? busy}) => AiChatState(
+        messages: messages ?? this.messages,
+        busy: busy ?? this.busy,
+      );
+}
+
+final aiChatProvider =
+    StateNotifierProvider<AiChatNotifier, AiChatState>((ref) => AiChatNotifier(ref));
+
+/// Notifier czatu z pętlą agentową: wysyła wiadomość → model może wołać
+/// narzędzia → wykonujemy je na planie → wyniki wracają do modelu → aż do
+/// zwykłej odpowiedzi tekstowej (limit iteracji chroni przed zapętleniem).
+class AiChatNotifier extends StateNotifier<AiChatState> {
+  static const _maxIterations = 12;
+
+  final Ref _ref;
+
+  /// Historia rozmowy w formacie natywnym dostawcy (zarządzana przez klienta).
+  final List<Map<String, dynamic>> _history = [];
+
+  /// Dostawca, którym prowadzono bieżącą rozmowę — zmiana dostawcy wymaga
+  /// zresetowania historii (formaty wiadomości są niekompatybilne).
+  AiProvider? _historyProvider;
+
+  AiChatNotifier(this._ref) : super(const AiChatState());
+
+  void _add(ChatMsgKind kind, String text) {
+    state = state.copyWith(messages: [...state.messages, ChatMsg(kind, text)]);
+  }
+
+  void clear() {
+    _history.clear();
+    _historyProvider = null;
+    state = const AiChatState();
+  }
+
+  AiClient _buildClient(AiConfig cfg) {
+    switch (cfg.provider) {
+      case AiProvider.anthropic:
+        return AnthropicClient(apiKey: cfg.apiKey, model: cfg.model);
+      case AiProvider.deepseek:
+        return DeepseekClient(apiKey: cfg.apiKey, model: cfg.model);
+    }
+  }
+
+  String _systemPrompt() {
+    final trip = _ref.read(tripProvider).valueOrNull;
+    final tripLine = trip == null
+        ? 'Użytkownik nie ma aktywnego planu podróży.'
+        : 'Aktywny plan: "${trip.title}"'
+            '${trip.subtitle != null ? ' — ${trip.subtitle}' : ''} '
+            '(${trip.days.length} dni, ${trip.extras.length} atrakcji extra).';
+    return 'Jesteś asystentem podróży wbudowanym w aplikację „Plan Podróży”. '
+        'Pomagasz przeglądać i modyfikować plan podróży użytkownika za pomocą narzędzi.\n\n'
+        'Zasady:\n'
+        '- Odpowiadaj po polsku, zwięźle i konkretnie.\n'
+        '- Zanim coś zmodyfikujesz, pobierz kontekst narzędziami odczytu '
+        '(get_trip_overview, get_day) — identyfikatory day_id/section_id/item_id '
+        'bierz WYŁĄCZNIE z wyników narzędzi, nigdy ich nie zgaduj.\n'
+        '- Gdy polecenie jest niejednoznaczne (np. nie wiadomo, o który dzień lub '
+        'punkt chodzi), zadaj pytanie zamiast zgadywać.\n'
+        '- Operacje nieodwracalne (usuwanie dni, sekcji, punktów) wykonuj tylko na '
+        'wyraźne polecenie; przy wątpliwościach zaproponuj ukrycie punktu (hidden).\n'
+        '- Nie wykonuj zmian, o które użytkownik nie prosił.\n'
+        '- Po wykonaniu zmian krótko podsumuj, co zostało zmienione.\n\n'
+        '$tripLine';
+  }
+
+  Future<void> send(String text) async {
+    final input = text.trim();
+    if (input.isEmpty || state.busy) return;
+
+    final cfg = await AiSettingsStore.getConfig();
+    if (!cfg.isValid) {
+      _add(ChatMsgKind.error,
+          'Asystent nie jest skonfigurowany — ustaw klucz API w ustawieniach.');
+      return;
+    }
+
+    // Zmiana dostawcy w trakcie rozmowy → historia w innym formacie, reset.
+    if (_historyProvider != null && _historyProvider != cfg.provider) {
+      _history.clear();
+      _add(ChatMsgKind.info,
+          'Zmieniono dostawcę AI — rozpoczęto nową rozmowę (${cfg.provider.label}).');
+    }
+    _historyProvider = cfg.provider;
+
+    final client = _buildClient(cfg);
+    final executor = AgentToolExecutor(_ref.read(tripProvider.notifier));
+
+    _add(ChatMsgKind.user, input);
+    state = state.copyWith(busy: true);
+    // Punkt kontrolny: przy błędzie API wycofujemy CAŁĄ nieudaną turę z
+    // historii (łącznie z częściowymi rundami narzędzi) — inaczej wisząca
+    // wiadomość tool_use bez tool_result psuje kolejne zapytania.
+    final checkpoint = _history.length;
+    _history.add(client.buildUserMessage(input));
+
+    try {
+      var finished = false;
+      for (var iter = 0; iter < _maxIterations && !finished; iter++) {
+        final turn = await client.send(
+          system: _systemPrompt(),
+          history: _history,
+          tools: agentToolDefs,
+        );
+
+        if (turn.toolCalls.isEmpty) {
+          client.appendAssistantTurn(_history, turn);
+          if (turn.text.isNotEmpty) _add(ChatMsgKind.assistant, turn.text);
+          finished = true;
+          break;
+        }
+
+        // Tekst towarzyszący wywołaniom narzędzi (np. „Sprawdzam plan…”).
+        if (turn.text.isNotEmpty) _add(ChatMsgKind.assistant, turn.text);
+
+        final results = <AiToolResult>[];
+        for (final call in turn.toolCalls) {
+          final outcome = await executor.execute(call.name, call.args);
+          if (outcome.label != null) {
+            _add(ChatMsgKind.toolAction, outcome.label!);
+          }
+          results.add(AiToolResult(
+            callId: call.id,
+            content: outcome.content,
+            isError: outcome.isError,
+          ));
+        }
+        client.appendToolRound(_history, turn, results);
+      }
+
+      if (!finished) {
+        _add(ChatMsgKind.error,
+            'Przerwano — osiągnięto limit kroków agenta ($_maxIterations). '
+            'Spróbuj rozbić polecenie na mniejsze.');
+      }
+    } on AiException catch (e) {
+      _add(ChatMsgKind.error, e.message);
+      _history.removeRange(checkpoint, _history.length);
+    } catch (e) {
+      _add(ChatMsgKind.error, 'Nieoczekiwany błąd: $e');
+    } finally {
+      state = state.copyWith(busy: false);
+    }
+  }
+}

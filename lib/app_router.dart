@@ -14,6 +14,8 @@ import 'screens/plan_library_screen.dart';
 import 'screens/trip_meta_edit_screen.dart';
 import 'screens/extras_edit_screen.dart';
 import 'screens/side_sections_edit_screen.dart';
+import 'screens/ai_assistant_screen.dart';
+import 'screens/ai_settings_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -61,6 +63,14 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/library',
       builder: (ctx, st) => const PlanLibraryScreen(),
+    ),
+    GoRoute(
+      path: '/assistant',
+      builder: (ctx, st) => const AiAssistantScreen(),
+    ),
+    GoRoute(
+      path: '/settings/ai',
+      builder: (ctx, st) => const AiSettingsScreen(),
     ),
     // ===== Edit routes =====
     GoRoute(

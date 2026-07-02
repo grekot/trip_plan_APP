@@ -105,6 +105,14 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/edit/contingency'),
           ),
+          _header(scheme, 'Asystent AI'),
+          ListTile(
+            leading: const Icon(Icons.smart_toy_outlined),
+            title: const Text('Konfiguracja asystenta AI'),
+            subtitle: const Text('Dostawca (Claude/DeepSeek), klucz API, model'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/ai'),
+          ),
           _header(scheme, 'Postęp'),
           ListTile(
             leading: const Icon(Icons.delete_sweep_outlined),
