@@ -5,7 +5,12 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 /// Navigator.pop(context, String).
 class QrScanScreen extends StatefulWidget {
   final String title;
-  const QrScanScreen({super.key, this.title = 'Skanuj kod QR'});
+  final String hint;
+  const QrScanScreen({
+    super.key,
+    this.title = 'Skanuj kod QR',
+    this.hint = 'Skieruj aparat na kod QR z hasłem',
+  });
 
   @override
   State<QrScanScreen> createState() => _QrScanScreenState();
@@ -62,14 +67,14 @@ class _QrScanScreenState extends State<QrScanScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
           ),
-          const Positioned(
+          Positioned(
             bottom: 40,
             left: 24,
             right: 24,
             child: Text(
-              'Skieruj aparat na kod QR z hasłem',
+              widget.hint,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 shadows: [Shadow(color: Colors.black, blurRadius: 6)],

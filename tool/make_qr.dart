@@ -6,13 +6,15 @@ import 'package:qr/qr.dart';
 /// serwisu. Otwórz wynikowy .html w przeglądarce i zeskanuj telefonem.
 ///
 /// Użycie:
-///   dart run tool/make_qr.dart <plik-z-tekstem|tekst> <wyjscie.html>
+///   dart run tool/make_qr.dart <plik-z-tekstem|tekst> <wyjscie.html> [tytuł]
+/// Tytuł jest opcjonalny (domyślnie „Hasło planów") — np. „Klucz API DeepSeek".
 void main(List<String> args) {
-  if (args.length != 2) {
-    stderr.writeln('Użycie: dart run tool/make_qr.dart <plik-z-tekstem|tekst> <wyjscie.html>');
+  if (args.length < 2 || args.length > 3) {
+    stderr.writeln('Użycie: dart run tool/make_qr.dart <plik-z-tekstem|tekst> <wyjscie.html> [tytuł]');
     exitCode = 2;
     return;
   }
+  final title = args.length == 3 ? args[2] : 'Hasło planów';
   final f = File(args[0]);
   final data = f.existsSync() ? f.readAsStringSync().trim() : args[0];
   if (data.isEmpty) {
@@ -42,7 +44,7 @@ void main(List<String> args) {
   }
 
   final html = '''<!DOCTYPE html>
-<html lang="pl"><head><meta charset="UTF-8"><title>Kod QR — hasło planów</title>
+<html lang="pl"><head><meta charset="UTF-8"><title>Kod QR — $title</title>
 <style>
   body { font-family: "Segoe UI", Arial, sans-serif; text-align: center; padding: 24px; color: #1a2027; }
   h1 { color: #1E6B52; font-size: 20px; }
@@ -50,7 +52,7 @@ void main(List<String> args) {
   .pass { font-family: Consolas, monospace; font-size: 18px; background: #f0f3f5; display: inline-block; padding: 8px 14px; border-radius: 8px; margin-top: 8px; user-select: all; }
   .note { color: #6b7480; font-size: 13px; max-width: 480px; margin: 16px auto; }
 </style></head><body>
-  <h1>Hasło planów — kod QR</h1>
+  <h1>$title — kod QR</h1>
   <div class="qr">
     <svg viewBox="0 0 $dim $dim" xmlns="http://www.w3.org/2000/svg" width="$dim" height="$dim" shape-rendering="crispEdges">
       <rect width="$dim" height="$dim" fill="#ffffff"/>
@@ -58,8 +60,8 @@ void main(List<String> args) {
     </svg>
   </div>
   <div class="pass">$data</div>
-  <p class="note">W aplikacji: Biblioteka planów → Hasło → „Skanuj kod QR" i skieruj telefon na ten kod.
-  Trzymaj ten plik prywatnie — zawiera hasło deszyfrujące plany.</p>
+  <p class="note">Zeskanuj ten kod telefonem w aplikacji (przycisk „Skanuj kod QR").
+  Trzymaj ten plik prywatnie — zawiera sekret zakodowany w kodzie QR.</p>
 </body></html>
 ''';
 

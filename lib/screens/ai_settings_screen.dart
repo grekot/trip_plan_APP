@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/ai_providers.dart';
@@ -6,6 +8,7 @@ import '../services/ai/ai_types.dart';
 import '../services/ai/anthropic_client.dart';
 import '../services/ai/deepseek_client.dart';
 import '../services/ai/model_catalog.dart';
+import 'qr_scan_screen.dart';
 
 /// Konfiguracja asystenta AI: dostawca (Claude/DeepSeek), klucz API i model.
 /// Klucz trafia do secure storage, dostawca i model do Hive.
@@ -86,6 +89,23 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
   String get _effectiveModel => _modelChoice == _customValue
       ? _modelCtrl.text.trim()
       : _modelChoice;
+
+  /// Skaner QR wymaga kamery — tylko Android/iOS.
+  bool get _canScanQr => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+  Future<void> _scanApiKeyQr() async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const QrScanScreen(
+          title: 'Skanuj kod QR z kluczem API',
+          hint: 'Skieruj aparat na kod QR z kluczem API',
+        ),
+      ),
+    );
+    if (scanned == null || scanned.trim().isEmpty) return;
+    setState(() => _keyCtrl.text = scanned.trim());
+    _toast('Klucz API wczytany z kodu QR — kliknij Zapisz.');
+  }
 
   @override
   void dispose() {
@@ -187,19 +207,34 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                     hintText: _provider == AiProvider.anthropic
                         ? 'sk-ant-…'
                         : 'sk-…',
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureKey
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(() => _obscureKey = !_obscureKey),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_canScanQr)
+                          IconButton(
+                            tooltip: 'Skanuj kod QR z kluczem',
+                            icon: const Icon(Icons.qr_code_scanner),
+                            onPressed: _scanApiKeyQr,
+                          ),
+                        IconButton(
+                          icon: Icon(_obscureKey
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                          onPressed: () =>
+                              setState(() => _obscureKey = !_obscureKey),
+                        ),
+                      ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _provider == AiProvider.anthropic
-                      ? 'Klucz wygenerujesz na platform.claude.com (Console → API Keys).'
-                      : 'Klucz wygenerujesz na platform.deepseek.com (API Keys).',
+                  (_provider == AiProvider.anthropic
+                          ? 'Klucz wygenerujesz na platform.claude.com (Console → API Keys).'
+                          : 'Klucz wygenerujesz na platform.deepseek.com (API Keys).') +
+                      (_canScanQr
+                          ? ' Możesz też zeskanować kod QR z kluczem (ikona przy polu).'
+                          : ''),
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
