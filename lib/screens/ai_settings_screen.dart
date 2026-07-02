@@ -5,6 +5,7 @@ import '../services/ai/ai_settings_store.dart';
 import '../services/ai/ai_types.dart';
 import '../services/ai/anthropic_client.dart';
 import '../services/ai/deepseek_client.dart';
+import '../services/ai/model_catalog.dart';
 
 /// Konfiguracja asystenta AI: dostawca (Claude/DeepSeek), klucz API i model.
 /// Klucz trafia do secure storage, dostawca i model do Hive.
@@ -16,12 +17,20 @@ class AiSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
+  /// Specjalna wartość dropdownu: model wpisywany ręcznie.
+  static const _customValue = '__custom__';
+
   late AiProvider _provider;
   final _keyCtrl = TextEditingController();
   final _modelCtrl = TextEditingController();
   bool _obscureKey = true;
   bool _loading = true;
   bool _testing = false;
+
+  /// Opcje dropdownu modeli (ID) + podpowiedzi dla znanych modeli.
+  List<String> _modelOptions = [];
+  String _modelChoice = _customValue;
+  bool _fetchingModels = false;
 
   @override
   void initState() {
@@ -34,12 +43,49 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     setState(() => _loading = true);
     final key = await AiSettingsStore.getApiKey(p);
     if (!mounted) return;
+    final saved = AiSettingsStore.getModel(p);
+    final options = ModelCatalog.curated[p]!.keys.toList();
+    // Zapisany model spoza listy (np. wpisany ręcznie) też ma być wybieralny.
+    if (!options.contains(saved)) options.insert(0, saved);
     setState(() {
       _keyCtrl.text = key ?? '';
-      _modelCtrl.text = AiSettingsStore.getModel(p);
+      _modelCtrl.text = saved;
+      _modelOptions = options;
+      _modelChoice = saved;
       _loading = false;
     });
   }
+
+  /// Pobiera aktualną listę modeli z API dostawcy i scala z listą w dropdownie.
+  Future<void> _fetchModels() async {
+    if (_keyCtrl.text.trim().isEmpty) {
+      _toast('Najpierw podaj klucz API.');
+      return;
+    }
+    setState(() => _fetchingModels = true);
+    try {
+      final fetched = await ModelCatalog.fetch(_provider, _keyCtrl.text.trim());
+      if (!mounted) return;
+      setState(() {
+        // Kolejność: sprawdzone modele najpierw, potem reszta z API.
+        final merged = <String>[
+          ..._modelOptions,
+          ...fetched.where((m) => !_modelOptions.contains(m)),
+        ];
+        _modelOptions = merged;
+      });
+      _toast('Pobrano listę modeli (${fetched.length}).');
+    } on AiException catch (e) {
+      _toast(e.message);
+    } finally {
+      if (mounted) setState(() => _fetchingModels = false);
+    }
+  }
+
+  /// Model wynikający z bieżącego wyboru (dropdown lub pole ręczne).
+  String get _effectiveModel => _modelChoice == _customValue
+      ? _modelCtrl.text.trim()
+      : _modelChoice;
 
   @override
   void dispose() {
@@ -51,7 +97,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
   Future<void> _save() async {
     await AiSettingsStore.setProvider(_provider);
     await AiSettingsStore.setApiKey(_provider, _keyCtrl.text);
-    await AiSettingsStore.setModel(_provider, _modelCtrl.text);
+    await AiSettingsStore.setModel(_provider, _effectiveModel);
     ref.invalidate(aiConfiguredProvider);
     if (mounted) {
       ScaffoldMessenger.of(context)
@@ -157,21 +203,72 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
-                Text('Model',
-                    style: TextStyle(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _modelCtrl,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    hintText: _provider.defaultModel,
-                    helperText: 'Domyślnie: ${_provider.defaultModel}',
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Model',
+                          style: TextStyle(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13)),
+                    ),
+                    TextButton.icon(
+                      onPressed: _fetchingModels ? null : _fetchModels,
+                      icon: _fetchingModels
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.refresh, size: 18),
+                      label: const Text('Pobierz listę z API',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  // Zmiana dostawcy musi odtworzyć pole (initialValue nie
+                  // aktualizuje istniejącego stanu FormField).
+                  key: ValueKey('model-dd-$_provider'),
+                  initialValue: _modelChoice,
+                  isExpanded: true,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: [
+                    for (final id in _modelOptions)
+                      DropdownMenuItem(
+                        value: id,
+                        child: Text(
+                          ModelCatalog.curated[_provider]![id] != null
+                              ? '$id — ${ModelCatalog.curated[_provider]![id]}'
+                              : id,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    const DropdownMenuItem(
+                      value: _customValue,
+                      child: Text('Inny model (wpisz ręcznie)…'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() {
+                      _modelChoice = v;
+                      if (v != _customValue) _modelCtrl.text = v;
+                    });
+                  },
+                ),
+                if (_modelChoice == _customValue) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _modelCtrl,
+                    autocorrect: false,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: _provider.defaultModel,
+                      helperText: 'Wpisz dokładne ID modelu',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _save,
