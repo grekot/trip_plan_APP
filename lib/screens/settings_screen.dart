@@ -190,8 +190,10 @@ class SettingsScreen extends ConsumerWidget {
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/$fileName');
         await file.writeAsString(json);
-        await Share.shareXFiles([XFile(file.path)],
-            subject: 'Plan podróży (eksport)');
+        await SharePlus.instance.share(ShareParams(
+          files: [XFile(file.path)],
+          subject: 'Plan podróży (eksport)',
+        ));
       }
     } catch (e) {
       if (context.mounted) _toast(context, 'Błąd eksportu: $e');

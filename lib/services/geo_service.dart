@@ -28,11 +28,11 @@ class GeoService {
       throw const GeoException(
           'Brak zgody na lokalizację — nadaj uprawnienie w ustawieniach systemu.');
     }
-    // geolocator 12.x — parametry płaskie (locationSettings pojawia się w 13+).
-    // ignore: deprecated_member_use
     return Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-      timeLimit: const Duration(seconds: 20),
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 20),
+      ),
     );
   }
 

@@ -300,8 +300,10 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/$fileName');
         await file.writeAsString(md);
-        await Share.shareXFiles([XFile(file.path)],
-            subject: 'Dziennik podróży');
+        await SharePlus.instance.share(ShareParams(
+          files: [XFile(file.path)],
+          subject: 'Dziennik podróży',
+        ));
       }
     } catch (e) {
       if (mounted) {
