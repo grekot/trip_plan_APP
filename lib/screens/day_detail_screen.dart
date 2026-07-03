@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../models/trip_models.dart';
 import '../models/enums.dart';
 import '../providers/providers.dart';
+import '../widgets/assistant_fab.dart';
 import '../widgets/item_tile.dart';
+import '../widgets/location_button.dart';
 import '../widgets/progress_bar.dart';
 import 'day_edit_screen.dart';
 import 'section_edit_screen.dart';
@@ -36,6 +39,7 @@ class DayDetailScreen extends ConsumerWidget {
 
         final dayIdx = trip.days.indexOf(day);
         return Scaffold(
+          floatingActionButton: const AssistantFab(),
           appBar: AppBar(
             title: Text('Dzień ${day.number}'),
             actions: [
@@ -51,8 +55,13 @@ class DayDetailScreen extends ConsumerWidget {
               PopupMenuButton<String>(
                 onSelected: (v) {
                   if (v == 'showHidden') _showHiddenDialog(context, day);
+                  if (v == 'addAlt') _showAddAlternativeDialog(context, ref, dayIdx);
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'addAlt',
+                    child: Text('Dodaj alternatywę'),
+                  ),
                   PopupMenuItem(
                     value: 'showHidden',
                     enabled: hiddenCount > 0,
@@ -93,17 +102,148 @@ class DayDetailScreen extends ConsumerWidget {
                   child: Row(children: [
                     const Icon(Icons.alt_route),
                     const SizedBox(width: 8),
-                    Text('Alternatywy',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: scheme.primary)),
+                    Expanded(
+                      child: Text('Alternatywy',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: scheme.primary)),
+                    ),
+                    IconButton(
+                      tooltip: 'Dodaj alternatywę',
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: () => _showAddAlternativeDialog(context, ref, dayIdx),
+                    ),
                   ]),
                 ),
                 ...day.alternatives.map((alt) => ItemTile(item: alt)).toList(),
               ],
+              ..._dayContingencies(context, trip, day, scheme),
               const SizedBox(height: 80),
             ],
           ),
         );
       },
+    );
+  }
+
+  /// Plany B przypisane do tego dnia (dayId) — sekcja na końcu listy dnia.
+  List<Widget> _dayContingencies(
+      BuildContext context, Trip trip, Day day, ColorScheme scheme) {
+    final cs = trip.contingency.where((c) => c.dayId == day.id).toList();
+    if (cs.isEmpty) return const [];
+    return [
+      const SizedBox(height: 8),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Row(children: [
+          Icon(Icons.umbrella, color: scheme.primary),
+          const SizedBox(width: 8),
+          Text('Plany B na ten dzień',
+              style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w700, color: scheme.primary)),
+        ]),
+      ),
+      for (final c in cs)
+        Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(c.trigger, style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                for (final o in c.options)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, right: 6),
+                        child: Icon(Icons.fiber_manual_record, size: 6),
+                      ),
+                      Expanded(child: Text(o)),
+                    ]),
+                  ),
+                if (c.locations.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    for (final l in c.locations) LocationButton(location: l),
+                  ]),
+                ],
+              ],
+            ),
+          ),
+        ),
+    ];
+  }
+
+  /// Dialog dodawania punktu alternatywnego do dnia (tytuł, opis, typ).
+  void _showAddAlternativeDialog(BuildContext context, WidgetRef ref, int dayIdx) {
+    if (dayIdx < 0) return;
+    final titleCtl = TextEditingController();
+    final descCtl = TextEditingController();
+    ItemType selectedType = ItemType.sightseeing;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
+        return Padding(
+          padding: EdgeInsets.only(
+              left: 16, right: 16, top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Dodaj alternatywę',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: titleCtl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                    labelText: 'Tytuł', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: descCtl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                    labelText: 'Opis (opcjonalnie)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<ItemType>(
+                initialValue: selectedType,
+                decoration: const InputDecoration(
+                    labelText: 'Typ', border: OutlineInputBorder()),
+                items: ItemType.values
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
+                    .toList(),
+                onChanged: (v) => setState(() { if (v != null) selectedType = v; }),
+              ),
+              const SizedBox(height: 12),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Anuluj')),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('Dodaj'),
+                  onPressed: () async {
+                    if (titleCtl.text.trim().isEmpty) return;
+                    final alt = Item(
+                      id: 'custom.${const Uuid().v4()}',
+                      title: titleCtl.text.trim(),
+                      description: descCtl.text.trim().isEmpty ? null : descCtl.text.trim(),
+                      type: selectedType,
+                      userAdded: true,
+                    );
+                    await ref.read(tripProvider.notifier).addAlternative(dayIdx, alt);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                ),
+              ]),
+            ],
+          ),
+        );
+      }),
     );
   }
 

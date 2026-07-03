@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../data/trip_loader.dart';
 import '../providers/providers.dart';
+import '../widgets/assistant_fab.dart';
 import '../widgets/progress_bar.dart';
 import 'day_detail_screen.dart';
 
@@ -32,6 +33,7 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       drawer: const _AppDrawer(),
+      floatingActionButton: const AssistantFab(),
       body: tripA.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => e is NoActivePlanException

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/providers.dart';
 import '../utils/icon_registry.dart';
+import '../widgets/assistant_fab.dart';
 
 /// Zakładka "Wąwozy" — lista wąwozów i wodospadów w okolicach zakwaterowania
 /// w Alpach Julijskich. Dane czytane z `trip.practical.wawozy.miejsca[]`,
@@ -17,6 +18,7 @@ class GorgesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Wąwozy')),
+      floatingActionButton: const AssistantFab(),
       body: tripA.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Błąd: $e')),

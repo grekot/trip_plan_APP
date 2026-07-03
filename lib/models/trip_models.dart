@@ -274,6 +274,10 @@ class ExtraAttraction {
   final Location? location;
   final List<Location> locations;
 
+  /// Atrakcja została już dodana do planu dziennego (oznaczenie miękkie —
+  /// zostaje na liście, ale UI pokazuje ją jako wykorzystaną).
+  final bool used;
+
   ExtraAttraction({
     required this.id,
     required this.title,
@@ -285,6 +289,7 @@ class ExtraAttraction {
     this.duration,
     this.location,
     this.locations = const [],
+    this.used = false,
   });
 
   factory ExtraAttraction.fromJson(Map<String, dynamic> j) => ExtraAttraction(
@@ -302,6 +307,7 @@ class ExtraAttraction {
         locations: (j['locations'] as List? ?? [])
             .map((e) => Location.fromJson((e as Map).cast<String, dynamic>()))
             .toList(),
+        used: j['used'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -316,7 +322,22 @@ class ExtraAttraction {
         if (location != null) 'location': location!.toJson(),
         if (locations.isNotEmpty)
           'locations': locations.map((l) => l.toJson()).toList(),
+        if (used) 'used': true,
       };
+
+  ExtraAttraction copyWith({bool? used}) => ExtraAttraction(
+        id: id,
+        title: title,
+        category: category,
+        drivingTime: drivingTime,
+        totalCostEur: totalCostEur,
+        description: description,
+        bestFor: bestFor,
+        duration: duration,
+        location: location,
+        locations: locations,
+        used: used ?? this.used,
+      );
 }
 
 class PackingItem {
@@ -380,21 +401,38 @@ class Contingency {
   final String trigger;
   final List<String> options;
 
+  /// Opcjonalne przypisanie do konkretnego dnia (ID dnia). Plan B z dayId
+  /// pokazuje się dodatkowo na ekranie tego dnia; bez dayId jest ogólny.
+  final String? dayId;
+
+  /// Lokalizacje powiązane z planem B (np. termy, muzeum) — renderowane jako
+  /// klikalne przyciski mapy.
+  final List<Location> locations;
+
   Contingency({
     required this.id,
     required this.trigger,
     required this.options,
+    this.dayId,
+    this.locations = const [],
   });
 
   factory Contingency.fromJson(Map<String, dynamic> j) => Contingency(
         id: j['id'] as String,
         trigger: j['trigger'] as String,
         options: (j['options'] as List? ?? []).map((e) => e.toString()).toList(),
+        dayId: j['dayId'] as String?,
+        locations: (j['locations'] as List? ?? [])
+            .map((e) => Location.fromJson((e as Map).cast<String, dynamic>()))
+            .toList(),
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'trigger': trigger,
         'options': options,
+        if (dayId != null) 'dayId': dayId,
+        if (locations.isNotEmpty)
+          'locations': locations.map((l) => l.toJson()).toList(),
       };
 }

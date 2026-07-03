@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../widgets/emergency_button.dart';
+import '../widgets/location_button.dart';
+import '../widgets/assistant_fab.dart';
 
 class EmergencyScreen extends ConsumerWidget {
   const EmergencyScreen({super.key});
@@ -13,6 +15,7 @@ class EmergencyScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Awaryjne')),
+      floatingActionButton: const AssistantFab(),
       body: tripA.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Błąd: $e')),
@@ -46,7 +49,32 @@ class EmergencyScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(c.trigger, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Row(children: [
+                          Expanded(
+                            child: Text(c.trigger,
+                                style: const TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                          if (c.dayId != null)
+                            Builder(builder: (_) {
+                              final dayNum = trip.days
+                                  .where((d) => d.id == c.dayId)
+                                  .map((d) => d.number)
+                                  .firstOrNull;
+                              if (dayNum == null) return const SizedBox.shrink();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: scheme.secondaryContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text('Dzień $dayNum',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: scheme.onSecondaryContainer)),
+                              );
+                            }),
+                        ]),
                         const SizedBox(height: 6),
                         for (final o in c.options)
                           Padding(
@@ -59,6 +87,12 @@ class EmergencyScreen extends ConsumerWidget {
                               Expanded(child: Text(o)),
                             ]),
                           ),
+                        if (c.locations.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(spacing: 6, runSpacing: 6, children: [
+                            for (final l in c.locations) LocationButton(location: l),
+                          ]),
+                        ],
                       ],
                     ),
                   ),

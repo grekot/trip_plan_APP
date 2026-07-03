@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/providers.dart';
 import '../widgets/progress_bar.dart';
+import '../widgets/assistant_fab.dart';
 
 class DaysOverviewScreen extends ConsumerWidget {
   const DaysOverviewScreen({super.key});
@@ -15,6 +16,7 @@ class DaysOverviewScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Wszystkie dni')),
+      floatingActionButton: const AssistantFab(),
       body: tripA.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Błąd: $e')),

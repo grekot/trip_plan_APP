@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/trip_models.dart';
 import '../providers/providers.dart';
+import '../widgets/assistant_fab.dart';
 
 class PackingScreen extends ConsumerWidget {
   const PackingScreen({super.key});
@@ -13,6 +14,7 @@ class PackingScreen extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      floatingActionButton: const AssistantFab(),
       appBar: AppBar(
         title: const Text('Pakowanie'),
         actions: [

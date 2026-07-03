@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/providers.dart';
+import '../widgets/assistant_fab.dart';
 
 class PracticalScreen extends ConsumerWidget {
   const PracticalScreen({super.key});
@@ -13,6 +14,7 @@ class PracticalScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Praktyczne')),
+      floatingActionButton: const AssistantFab(),
       body: tripA.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Błąd: $e')),

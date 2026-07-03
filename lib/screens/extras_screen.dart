@@ -4,6 +4,7 @@ import '../models/enums.dart';
 import '../models/trip_models.dart';
 import '../providers/providers.dart';
 import '../widgets/location_button.dart';
+import '../widgets/assistant_fab.dart';
 
 class ExtrasScreen extends ConsumerStatefulWidget {
   const ExtrasScreen({super.key});
@@ -21,6 +22,7 @@ class _ExtrasScreenState extends ConsumerState<ExtrasScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Atrakcje dodatkowe')),
+      floatingActionButton: const AssistantFab(),
       body: tripA.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Błąd: $e')),
@@ -75,6 +77,17 @@ class _ExtrasScreenState extends ConsumerState<ExtrasScreen> {
           children: [
             Row(children: [
               Expanded(child: Text(e.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+              if (e.used)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: scheme.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('✓ w planie',
+                      style: TextStyle(fontSize: 11, color: scheme.onTertiaryContainer)),
+                ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(

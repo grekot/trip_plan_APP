@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import '../services/plan_history_service.dart';
 import '../services/ai/agent_tools.dart';
 import '../services/ai/ai_client.dart';
 import '../services/ai/ai_settings_store.dart';
@@ -80,6 +82,28 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
         : 'Aktywny plan: "${trip.title}"'
             '${trip.subtitle != null ? ' — ${trip.subtitle}' : ''} '
             '(${trip.days.length} dni, ${trip.extras.length} atrakcji extra).';
+
+    // Kontekst czasowy: bieżąca data/godzina + pozycja względem wyjazdu.
+    final now = DateTime.now();
+    final df = DateFormat('EEEE, d MMMM yyyy', 'pl_PL');
+    final tf = DateFormat('HH:mm');
+    var timeLine = 'Dziś jest ${df.format(now)}, godzina ${tf.format(now)}.';
+    final startDate = _ref.read(settingsProvider).tripStartDate;
+    if (startDate != null) {
+      timeLine += ' Wyjazd zaczyna się ${df.format(startDate)}.';
+      final dayIdx = _ref.read(activeDayIndexProvider);
+      if (trip != null && dayIdx != null) {
+        if (dayIdx == -1) {
+          final left = startDate.difference(DateTime(now.year, now.month, now.day)).inDays;
+          timeLine += ' Do wyjazdu zostało $left dni.';
+        } else if (dayIdx >= trip.days.length) {
+          timeLine += ' Wyjazd już się zakończył.';
+        } else {
+          final d = trip.days[dayIdx];
+          timeLine += ' Dziś jest dzień ${d.number} wyjazdu (id: "${d.id}", „${d.title}”).';
+        }
+      }
+    }
     return 'Jesteś asystentem podróży wbudowanym w aplikację „Plan Podróży”. '
         'Pomagasz przeglądać i modyfikować plan podróży użytkownika za pomocą narzędzi.\n\n'
         'Zasady:\n'
@@ -91,9 +115,12 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
         'punkt chodzi), zadaj pytanie zamiast zgadywać.\n'
         '- Operacje nieodwracalne (usuwanie dni, sekcji, punktów) wykonuj tylko na '
         'wyraźne polecenie; przy wątpliwościach zaproponuj ukrycie punktu (hidden).\n'
+        '- Gdy dodajesz atrakcję extra jako punkt planu dziennego, oznacz ją '
+        'potem przez set_extra_used(used=true) — nie usuwaj jej z listy extras, '
+        'chyba że użytkownik wyraźnie o to poprosi.\n'
         '- Nie wykonuj zmian, o które użytkownik nie prosił.\n'
         '- Po wykonaniu zmian krótko podsumuj, co zostało zmienione.\n\n'
-        '$tripLine';
+        '$tripLine\n$timeLine';
   }
 
   Future<void> send(String text) async {
@@ -128,6 +155,7 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
 
     try {
       var finished = false;
+      var snapshotDone = false;
       for (var iter = 0; iter < _maxIterations && !finished; iter++) {
         final turn = await client.send(
           system: _systemPrompt(),
@@ -147,6 +175,17 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
 
         final results = <AiToolResult>[];
         for (final call in turn.toolCalls) {
+          // Przed PIERWSZĄ modyfikacją w tej turze zapisz snapshot planu do
+          // historii zmian — żeby dało się cofnąć całą akcję agenta.
+          if (!snapshotDone && !readOnlyAgentTools.contains(call.name)) {
+            final trip = _ref.read(tripProvider).valueOrNull;
+            if (trip != null) {
+              final shortLabel =
+                  input.length > 80 ? '${input.substring(0, 80)}…' : input;
+              await PlanHistoryService.snapshot(trip, 'AI: $shortLabel');
+            }
+            snapshotDone = true;
+          }
           final outcome = await executor.execute(call.name, call.args);
           if (outcome.label != null) {
             _add(ChatMsgKind.toolAction, outcome.label!);

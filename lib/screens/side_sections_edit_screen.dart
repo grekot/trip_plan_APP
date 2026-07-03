@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../models/enums.dart';
 import '../models/trip_models.dart';
 import '../providers/providers.dart';
+import 'location_picker_screen.dart';
 
 /// Edycja listy pozycji pakowania.
 class PackingEditScreen extends ConsumerWidget {
@@ -230,6 +231,10 @@ class ContingencyEditScreen extends ConsumerWidget {
     final c = idx != null ? t.contingency[idx] : null;
     final trigCtl = TextEditingController(text: c?.trigger ?? '');
     final options = <String>[...(c?.options ?? <String>[])];
+    // Przypisanie do dnia (null = plan ogólny). dayId wskazujący nieistniejący
+    // dzień traktujemy jak brak przypisania.
+    String? dayId = t.days.any((d) => d.id == c?.dayId) ? c?.dayId : null;
+    final locations = <Location>[...(c?.locations ?? const <Location>[])];
 
     Navigator.of(context).push(MaterialPageRoute(builder: (ctx) {
       return StatefulBuilder(builder: (ctx, setState) {
@@ -251,6 +256,8 @@ class ContingencyEditScreen extends ConsumerWidget {
                       id: c?.id ?? 'custom.${const Uuid().v4()}',
                       trigger: trigCtl.text.trim(),
                       options: options.where((o) => o.trim().isNotEmpty).toList(),
+                      dayId: dayId,
+                      locations: List.of(locations),
                     );
                     if (idx != null) {
                       await ref.read(tripProvider.notifier).updateContingency(idx, newC);
@@ -267,6 +274,24 @@ class ContingencyEditScreen extends ConsumerWidget {
           ),
           body: ListView(padding: const EdgeInsets.all(16), children: [
             TextField(controller: trigCtl, decoration: const InputDecoration(labelText: 'Trigger (sytuacja)', hintText: 'np. Deszcz przy treku', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String?>(
+              initialValue: dayId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Przypisz do dnia (opcjonalnie)',
+                helperText: 'Przypisany plan B pokazuje się też na ekranie dnia',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('Ogólny (bez dnia)')),
+                for (final d in t.days)
+                  DropdownMenuItem<String?>(
+                      value: d.id,
+                      child: Text('Dzień ${d.number} — ${d.title}', overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (v) => setState(() => dayId = v),
+            ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -285,6 +310,54 @@ class ContingencyEditScreen extends ConsumerWidget {
                     IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() { options.removeAt(i); })),
                   ])),
                 TextButton.icon(icon: const Icon(Icons.add, size: 18), label: const Text('Dodaj opcję'), onPressed: () => setState(() { options.add(''); })),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(border: Border.all(color: Theme.of(context).colorScheme.outlineVariant), borderRadius: BorderRadius.circular(8)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('LOKALIZACJE (KLIKALNA MAPA)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                const SizedBox(height: 8),
+                for (int i = 0; i < locations.length; i++)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.place_outlined),
+                    title: Text(locations[i].name),
+                    subtitle: Text(
+                        '${locations[i].lat.toStringAsFixed(4)}, ${locations[i].lng.toStringAsFixed(4)}',
+                        style: const TextStyle(fontSize: 11)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => setState(() { locations.removeAt(i); }),
+                    ),
+                    onTap: () async {
+                      final result = await Navigator.of(ctx).push(
+                        MaterialPageRoute(
+                          builder: (_) => LocationPickerScreen(
+                              initial: locations[i], title: 'Edytuj lokalizację'),
+                        ),
+                      );
+                      if (isRemoveResult(result)) {
+                        setState(() { locations.removeAt(i); });
+                      } else if (result is Location) {
+                        setState(() { locations[i] = result; });
+                      }
+                    },
+                  ),
+                TextButton.icon(
+                  icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+                  label: const Text('Dodaj lokalizację'),
+                  onPressed: () async {
+                    final result = await Navigator.of(ctx).push(
+                      MaterialPageRoute(
+                        builder: (_) => const LocationPickerScreen(title: 'Dodaj lokalizację'),
+                      ),
+                    );
+                    if (result is Location) setState(() { locations.add(result); });
+                  },
+                ),
               ]),
             ),
           ]),

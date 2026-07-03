@@ -98,6 +98,13 @@ class TripNotifier extends StateNotifier<AsyncValue<Trip>> {
     await _commit(_tripWith(title: title, subtitle: subtitle, summary: summary, version: version));
   }
 
+  /// Podmienia całą mapę `practical` (informacje praktyczne, rozmówki,
+  /// wąwozy itd. — swobodny JSON). Używane przez agenta AI.
+  Future<void> updatePractical(Map<String, dynamic> practical) async {
+    if (state.value == null) return;
+    await _commit(_tripWith(practical: practical));
+  }
+
   // ===== Day operations =====
   Future<void> updateDay(int dayIdx, {String? id, int? number, String? title, String? summary}) async {
     final t = state.value;

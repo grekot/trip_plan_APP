@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/trip_loader.dart';
 import '../providers/providers.dart';
+import '../services/plan_history_service.dart';
 import '../widgets/update_dialog.dart';
 
 bool get _isDesktop {
@@ -72,6 +73,13 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Importuj plan z pliku'),
             subtitle: const Text('Wczytaj JSON z dysku telefonu'),
             onTap: () => _importTrip(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('Historia zmian planu'),
+            subtitle: const Text('Cofnij zmiany asystenta AI lub import'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/history'),
           ),
           _header(scheme, 'Edycja planu w apce'),
           ListTile(
@@ -207,6 +215,8 @@ class SettingsScreen extends ConsumerWidget {
       }
       final oldTrip = ref.read(tripProvider).value;
       if (oldTrip != null) {
+        // Snapshot do historii zmian — import podmienia cały plan.
+        await PlanHistoryService.snapshot(oldTrip, 'Przed importem planu');
         final diff = TripLoader.diff(oldTrip, imp.trip!);
         if (context.mounted) {
           final confirm = await showDialog<bool>(
