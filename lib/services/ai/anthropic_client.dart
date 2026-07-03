@@ -56,6 +56,22 @@ class AnthropicClient implements AiClient {
     });
   }
 
+  /// Wariant serwerowego narzędzia web_search wg modelu: nowe modele
+  /// (Opus 4.6+, Sonnet 4.6, Fable 5) mają wersję z dynamicznym filtrowaniem,
+  /// starsze — bazową.
+  String get _webSearchToolType {
+    const modern = [
+      'claude-fable-5',
+      'claude-opus-4-8',
+      'claude-opus-4-7',
+      'claude-opus-4-6',
+      'claude-sonnet-4-6',
+    ];
+    return modern.any(model.startsWith)
+        ? 'web_search_20260209'
+        : 'web_search_20250305';
+  }
+
   @override
   Future<AiTurn> send({
     required String system,
@@ -69,15 +85,17 @@ class AnthropicClient implements AiClient {
       'thinking': {'type': 'adaptive'},
       'system': system,
       'messages': history,
-      if (tools.isNotEmpty)
-        'tools': [
-          for (final t in tools)
-            {
-              'name': t.name,
-              'description': t.description,
-              'input_schema': t.schema,
-            },
-        ],
+      'tools': [
+        for (final t in tools)
+          {
+            'name': t.name,
+            'description': t.description,
+            'input_schema': t.schema,
+          },
+        // Serwerowe wyszukiwanie internetowe Anthropic — wykonuje się po
+        // stronie API (wyniki wracają jako bloki treści, bez rundy klienta).
+        {'type': _webSearchToolType, 'name': 'web_search', 'max_uses': 5},
+      ],
     };
 
     http.Response resp;

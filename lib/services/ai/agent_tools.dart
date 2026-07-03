@@ -9,6 +9,7 @@ import '../../providers/providers.dart';
 import '../geo_service.dart';
 import '../weather_service.dart';
 import 'ai_types.dart';
+import 'web_search_service.dart';
 
 /// Wynik wykonania narzędzia przez agenta.
 /// `content` wraca do modelu; `label` to krótki opis akcji pokazywany w czacie.
@@ -41,7 +42,42 @@ const Set<String> readOnlyAgentTools = {
   'get_journal',
   'add_journal_entry',
   'delete_journal_entry',
+  'web_search',
+  'fetch_url',
 };
+
+/// Narzędzia internetowe wykonywane po stronie aplikacji — dla dostawców
+/// bez natywnego web search (DeepSeek, Gemini). Claude dostaje zamiast nich
+/// serwerowe narzędzie web_search Anthropic (deklarowane w AnthropicClient).
+final List<AiToolDef> clientWebToolDefs = [
+  const AiToolDef(
+    name: 'web_search',
+    description: 'Wyszukuje w internecie (DuckDuckGo). Zwraca tytuły, adresy URL '
+        'i krótkie opisy wyników. Używaj do aktualnych informacji: godziny '
+        'otwarcia, ceny biletów, wydarzenia, pogoda długoterminowa, objazdy. '
+        'Po znalezieniu obiecującego wyniku możesz pobrać pełną treść przez fetch_url.',
+    schema: {
+      'type': 'object',
+      'properties': {
+        'query': {'type': 'string', 'description': 'Zapytanie wyszukiwania'},
+      },
+      'required': ['query'],
+    },
+  ),
+  const AiToolDef(
+    name: 'fetch_url',
+    description: 'Pobiera stronę WWW i zwraca jej treść jako czysty tekst '
+        '(przycięty do ~8000 znaków). Używaj po web_search, żeby przeczytać '
+        'szczegóły ze znalezionej strony.',
+    schema: {
+      'type': 'object',
+      'properties': {
+        'url': {'type': 'string', 'description': 'Pełny adres http(s)'},
+      },
+      'required': ['url'],
+    },
+  ),
+];
 
 /// Definicje narzędzi agenta — wspólne dla obu dostawców.
 /// Wszystkie operacje modyfikujące używają stabilnych ID (day_id, section_id,
@@ -768,6 +804,10 @@ class AgentToolExecutor {
           return await _updateExtra(args);
         case 'delete_extra':
           return await _deleteExtra(args);
+        case 'web_search':
+          return await _webSearch(args);
+        case 'fetch_url':
+          return await _fetchUrl(args);
         case 'get_weather_forecast':
           return await _getWeatherForecast(args);
         case 'get_current_location':
@@ -1262,6 +1302,35 @@ class AgentToolExecutor {
     final title = _trip.extras[idx].title;
     await notifier.deleteExtra(idx);
     return AgentToolOutcome('OK', label: 'Usunięto atrakcję extra: $title');
+  }
+
+  // ===== Internet (dostawcy bez natywnego web search) =====
+
+  Future<AgentToolOutcome> _webSearch(Map<String, dynamic> args) async {
+    final query = _str(args, 'query');
+    try {
+      final results = await WebSearchService.search(query);
+      if (results.isEmpty) {
+        return AgentToolOutcome('Brak wyników dla zapytania "$query".',
+            label: 'Szukano: $query');
+      }
+      return AgentToolOutcome(
+        jsonEncode([for (final r in results) r.toJson()]),
+        label: 'Szukano: $query',
+      );
+    } catch (e) {
+      throw _ToolError('Błąd wyszukiwania: $e');
+    }
+  }
+
+  Future<AgentToolOutcome> _fetchUrl(Map<String, dynamic> args) async {
+    final url = _str(args, 'url');
+    try {
+      final text = await WebSearchService.fetchUrl(url);
+      return AgentToolOutcome(text, label: 'Pobrano stronę: $url');
+    } catch (e) {
+      throw _ToolError('Błąd pobierania strony: $e');
+    }
   }
 
   // ===== Pogoda, GPS, dziennik =====

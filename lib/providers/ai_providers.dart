@@ -173,7 +173,9 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
         '- Gdy dodajesz atrakcję extra jako punkt planu dziennego, oznacz ją '
         'potem przez set_extra_used(used=true) — nie usuwaj jej z listy extras, '
         'chyba że użytkownik wyraźnie o to poprosi.\n'
-        '- Masz też narzędzia poza planem: prognozę pogody (get_weather_forecast '
+        '- Masz też narzędzia poza planem: wyszukiwanie w internecie (web_search '
+        '— używaj do aktualnych informacji: godziny otwarcia, ceny biletów, '
+        'wydarzenia; zawsze podawaj źródło), prognozę pogody (get_weather_forecast '
         '— przydatna przy proponowaniu planów B), bieżącą pozycję GPS '
         '(get_current_location) i dziennik podróży (get_journal/add_journal_entry). '
         'Gdy użytkownik mówi „jesteśmy tutaj / zapisz to miejsce", pobierz pozycję '
@@ -217,6 +219,12 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
     // ani nie zerwie połączenia, gdy użytkownik zrzuci apkę w tło.
     await AgentKeepalive.start();
 
+    // Claude ma serwerowy web_search (deklarowany w AnthropicClient);
+    // pozostali dostawcy dostają wyszukiwanie po stronie aplikacji.
+    final tools = cfg.provider == AiProvider.anthropic
+        ? agentToolDefs
+        : [...agentToolDefs, ...clientWebToolDefs];
+
     try {
       var finished = false;
       var snapshotDone = false;
@@ -224,12 +232,15 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
         final turn = await client.send(
           system: _systemPrompt(),
           history: _history,
-          tools: agentToolDefs,
+          tools: tools,
         );
 
         if (turn.toolCalls.isEmpty) {
           client.appendAssistantTurn(_history, turn);
           if (turn.text.isNotEmpty) _add(ChatMsgKind.assistant, turn.text);
+          // pause_turn: serwerowe narzędzie (web_search) przerwało turę —
+          // ponowne wysłanie historii wznawia pracę po stronie API.
+          if (turn.stopReason == 'pause_turn') continue;
           finished = true;
           break;
         }
