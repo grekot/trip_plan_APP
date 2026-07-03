@@ -1,7 +1,7 @@
 name: slowenia_app
 description: Interaktywny plan wyjazdu do Słowenii 2026
 publish_to: 'none'
-version: 1.0.11+12
+version: 1.0.12+13
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -36,6 +36,10 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   # Skanowanie kodu QR z hasłem (żeby nie przepisywać długiego hasła ręcznie).
   mobile_scanner: ^5.2.3
+  # Sterowanie głosowe czatu z agentem AI (rozpoznawanie mowy pl_PL, mobile).
+  speech_to_text: ^6.6.0
+  # GPS do funkcji „jestem tutaj" w dzienniku podróży.
+  geolocator: ^12.0.0
 
 dev_dependencies:
   flutter_lints: ^4.0.0

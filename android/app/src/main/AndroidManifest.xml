@@ -8,6 +8,13 @@
          sprzętowo — apka działa też bez niej (wpisanie hasła ręcznie). -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- Mikrofon: sterowanie głosowe czatu z agentem AI (speech_to_text). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <!-- GPS: funkcja „jestem tutaj" w dzienniku podróży (geolocator). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
     <application
         android:label="Plan Podróży"
         android:name="${applicationName}"

@@ -1,8 +1,13 @@
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/enums.dart';
 import '../../models/trip_models.dart';
+import '../../providers/journal_providers.dart';
 import '../../providers/providers.dart';
+import '../geo_service.dart';
+import '../weather_service.dart';
 import 'ai_types.dart';
 
 /// Wynik wykonania narzędzia przez agenta.
@@ -20,8 +25,9 @@ class _ToolError implements Exception {
   const _ToolError(this.message);
 }
 
-/// Narzędzia tylko-do-odczytu — nie modyfikują planu (używane do decyzji,
-/// czy przed wykonaniem tury trzeba zrobić snapshot do historii zmian).
+/// Narzędzia, które NIE modyfikują planu podróży (odczyty oraz operacje na
+/// dzienniku/pogodzie/GPS) — przed ich wykonaniem nie robimy snapshotu planu
+/// do historii zmian.
 const Set<String> readOnlyAgentTools = {
   'get_trip_overview',
   'get_day',
@@ -30,6 +36,11 @@ const Set<String> readOnlyAgentTools = {
   'get_practical',
   'get_emergency',
   'get_contingency',
+  'get_weather_forecast',
+  'get_current_location',
+  'get_journal',
+  'add_journal_entry',
+  'delete_journal_entry',
 };
 
 /// Definicje narzędzi agenta — wspólne dla obu dostawców.
@@ -495,6 +506,61 @@ final List<AiToolDef> agentToolDefs = [
       'required': ['extra_id'],
     },
   ),
+  // ===== Pogoda, GPS, dziennik =====
+  const AiToolDef(
+    name: 'get_weather_forecast',
+    description: 'Prognoza pogody (open-meteo, do 16 dni w przód). Z day_id zwraca '
+        'prognozę dla daty i lokalizacji tego dnia (wymaga ustawionej daty startu '
+        'wyjazdu). Bez day_id zwraca prognozę na najbliższe 7 dni dla rejonu planu. '
+        'Przydatne przy proponowaniu planów B (deszcz itp.).',
+    schema: {
+      'type': 'object',
+      'properties': {
+        'day_id': {'type': 'string', 'description': 'Opcjonalne ID dnia planu'},
+      },
+      'required': [],
+    },
+  ),
+  const AiToolDef(
+    name: 'get_current_location',
+    description: 'Bieżąca pozycja GPS użytkownika + nazwa miejsca (odwrotne '
+        'geokodowanie). Użyj, gdy użytkownik mówi „jesteśmy tutaj", „dodaj to '
+        'miejsce", „zapisz gdzie jesteśmy". Wymaga zgody na lokalizację.',
+    schema: {'type': 'object', 'properties': {}, 'required': []},
+  ),
+  const AiToolDef(
+    name: 'get_journal',
+    description: 'Zwraca wpisy dziennika podróży (osobiste notatki z trasy, '
+        'niezależne od planu), od najnowszego.',
+    schema: {'type': 'object', 'properties': {}, 'required': []},
+  ),
+  const AiToolDef(
+    name: 'add_journal_entry',
+    description: 'Dodaje wpis do dziennika podróży. Gdy użytkownik chce zapisać '
+        'bieżące miejsce („jestem w…", „jesteśmy tutaj"), najpierw pobierz pozycję '
+        'przez get_current_location i przekaż jej współrzędne oraz nazwę.',
+    schema: {
+      'type': 'object',
+      'properties': {
+        'text': {'type': 'string', 'description': 'Treść wpisu'},
+        'location_name': {'type': 'string'},
+        'lat': {'type': 'number'},
+        'lng': {'type': 'number'},
+      },
+      'required': ['text'],
+    },
+  ),
+  const AiToolDef(
+    name: 'delete_journal_entry',
+    description: 'Usuwa wpis z dziennika podróży. Tylko na wyraźne polecenie.',
+    schema: {
+      'type': 'object',
+      'properties': {
+        'journal_id': {'type': 'string'},
+      },
+      'required': ['journal_id'],
+    },
+  ),
   // ===== Kontakty alarmowe =====
   const AiToolDef(
     name: 'add_emergency',
@@ -615,10 +681,15 @@ final List<AiToolDef> agentToolDefs = [
 
 /// Wykonawca narzędzi agenta — tłumaczy wywołania (po ID) na operacje
 /// istniejącego [TripNotifier] (po indeksach) i zwraca wyniki jako JSON.
+/// Przez [ref] sięga też do dziennika podróży, ustawień (data startu)
+/// oraz serwisów pogody i GPS.
 class AgentToolExecutor {
-  final TripNotifier notifier;
+  final Ref ref;
 
-  AgentToolExecutor(this.notifier);
+  AgentToolExecutor(this.ref);
+
+  TripNotifier get notifier => ref.read(tripProvider.notifier);
+  JournalNotifier get _journal => ref.read(journalProvider.notifier);
 
   Trip get _trip {
     final t = notifier.current;
@@ -697,6 +768,16 @@ class AgentToolExecutor {
           return await _updateExtra(args);
         case 'delete_extra':
           return await _deleteExtra(args);
+        case 'get_weather_forecast':
+          return await _getWeatherForecast(args);
+        case 'get_current_location':
+          return await _getCurrentLocation();
+        case 'get_journal':
+          return _getJournal();
+        case 'add_journal_entry':
+          return await _addJournalEntry(args);
+        case 'delete_journal_entry':
+          return await _deleteJournalEntry(args);
         case 'add_emergency':
           return await _addEmergency(args);
         case 'update_emergency':
@@ -1181,6 +1262,140 @@ class AgentToolExecutor {
     final title = _trip.extras[idx].title;
     await notifier.deleteExtra(idx);
     return AgentToolOutcome('OK', label: 'Usunięto atrakcję extra: $title');
+  }
+
+  // ===== Pogoda, GPS, dziennik =====
+
+  /// Pierwsza lokalizacja w danym dniu (punkty, potem alternatywy),
+  /// a gdy brak — pierwsza lokalizacja w całym planie.
+  Location? _dayLocation(Day day) {
+    for (final i in [...day.allItems, ...day.alternatives]) {
+      final loc = i.location ?? (i.locations.isNotEmpty ? i.locations.first : null);
+      if (loc != null) return loc;
+    }
+    for (final i in _trip.allItems) {
+      final loc = i.location ?? (i.locations.isNotEmpty ? i.locations.first : null);
+      if (loc != null) return loc;
+    }
+    return null;
+  }
+
+  Future<AgentToolOutcome> _getWeatherForecast(Map<String, dynamic> args) async {
+    final dayId = args['day_id'] as String?;
+    final df = DateFormat('yyyy-MM-dd');
+    try {
+      if (dayId != null && dayId.isNotEmpty) {
+        final idx = _dayIdx(dayId);
+        final day = _trip.days[idx];
+        final start = ref.read(settingsProvider).tripStartDate;
+        if (start == null) {
+          throw const _ToolError(
+              'Nie można wyznaczyć daty dnia — użytkownik nie ustawił daty '
+              'startu wyjazdu w Ustawieniach.');
+        }
+        final date = start.add(Duration(days: idx));
+        final loc = _dayLocation(day);
+        if (loc == null) {
+          throw const _ToolError('Plan nie zawiera żadnej lokalizacji — '
+              'nie wiadomo, dla jakiego miejsca pobrać prognozę.');
+        }
+        final w = await WeatherService.forDate(loc.lat, loc.lng, date);
+        if (w == null) {
+          throw _ToolError('Data ${df.format(date)} jest poza zakresem '
+              'prognozy (maks. 16 dni w przód).');
+        }
+        return AgentToolOutcome(jsonEncode({
+          'day_id': dayId,
+          'date': df.format(date),
+          'location': loc.name,
+          't_max_c': w.tMax,
+          't_min_c': w.tMin,
+          'precipitation_probability_percent': w.precipProb,
+          'description': w.description,
+        }));
+      }
+      // Bez day_id: 7 dni dla rejonu planu.
+      final loc = _dayLocation(_trip.days.isNotEmpty
+          ? _trip.days.first
+          : (throw const _ToolError('Plan nie ma dni.')));
+      if (loc == null) {
+        throw const _ToolError('Plan nie zawiera żadnej lokalizacji.');
+      }
+      final list = await WeatherService.forecast(loc.lat, loc.lng);
+      return AgentToolOutcome(jsonEncode({
+        'location': loc.name,
+        'days': [
+          for (final w in list.take(7))
+            {
+              'date': df.format(w.date),
+              't_max_c': w.tMax,
+              't_min_c': w.tMin,
+              'precipitation_probability_percent': w.precipProb,
+              'description': w.description,
+            },
+        ],
+      }));
+    } on _ToolError {
+      rethrow;
+    } catch (e) {
+      throw _ToolError('Błąd pobierania prognozy: $e');
+    }
+  }
+
+  Future<AgentToolOutcome> _getCurrentLocation() async {
+    try {
+      final place = await GeoService.currentPlace();
+      return AgentToolOutcome(jsonEncode({
+        'lat': place.lat,
+        'lng': place.lng,
+        if (place.name != null) 'name': place.name,
+      }));
+    } on GeoException catch (e) {
+      throw _ToolError(e.message);
+    } catch (e) {
+      throw _ToolError('Nie udało się pobrać pozycji GPS: $e');
+    }
+  }
+
+  AgentToolOutcome _getJournal() {
+    final entries = ref.read(journalProvider);
+    return AgentToolOutcome(jsonEncode([
+      for (final e in entries)
+        {
+          'journal_id': e.id,
+          'timestamp': e.ts.toIso8601String(),
+          'text': e.text,
+          if (e.locationName != null) 'location_name': e.locationName,
+          if (e.lat != null) 'lat': e.lat,
+          if (e.lng != null) 'lng': e.lng,
+        },
+    ]));
+  }
+
+  Future<AgentToolOutcome> _addJournalEntry(Map<String, dynamic> args) async {
+    final text = _str(args, 'text');
+    final entry = await _journal.add(
+      text: text,
+      locationName: args['location_name'] as String?,
+      lat: (args['lat'] as num?)?.toDouble(),
+      lng: (args['lng'] as num?)?.toDouble(),
+    );
+    return AgentToolOutcome(
+      jsonEncode({'journal_id': entry.id}),
+      label: 'Dodano wpis do dziennika'
+          '${entry.locationName != null ? ' (${entry.locationName})' : ''}',
+    );
+  }
+
+  Future<AgentToolOutcome> _deleteJournalEntry(Map<String, dynamic> args) async {
+    final id = _str(args, 'journal_id');
+    final entries = ref.read(journalProvider);
+    final entry = entries.where((e) => e.id == id).firstOrNull;
+    if (entry == null) {
+      throw _ToolError('Nie znaleziono wpisu dziennika o ID "$id".');
+    }
+    await _journal.delete(id);
+    return const AgentToolOutcome('OK', label: 'Usunięto wpis z dziennika');
   }
 
   // ===== Kontakty alarmowe =====

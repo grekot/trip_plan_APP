@@ -17,6 +17,7 @@ import 'screens/side_sections_edit_screen.dart';
 import 'screens/ai_assistant_screen.dart';
 import 'screens/ai_settings_screen.dart';
 import 'screens/plan_history_screen.dart';
+import 'screens/journal_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -76,6 +77,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/history',
       builder: (ctx, st) => const PlanHistoryScreen(),
+    ),
+    GoRoute(
+      path: '/journal',
+      builder: (ctx, st) => const JournalScreen(),
     ),
     // ===== Edit routes =====
     GoRoute(

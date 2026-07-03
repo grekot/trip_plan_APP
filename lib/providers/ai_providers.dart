@@ -118,6 +118,11 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
         '- Gdy dodajesz atrakcję extra jako punkt planu dziennego, oznacz ją '
         'potem przez set_extra_used(used=true) — nie usuwaj jej z listy extras, '
         'chyba że użytkownik wyraźnie o to poprosi.\n'
+        '- Masz też narzędzia poza planem: prognozę pogody (get_weather_forecast '
+        '— przydatna przy proponowaniu planów B), bieżącą pozycję GPS '
+        '(get_current_location) i dziennik podróży (get_journal/add_journal_entry). '
+        'Gdy użytkownik mówi „jesteśmy tutaj / zapisz to miejsce", pobierz pozycję '
+        'GPS i dodaj wpis do dziennika z lokalizacją.\n'
         '- Nie wykonuj zmian, o które użytkownik nie prosił.\n'
         '- Po wykonaniu zmian krótko podsumuj, co zostało zmienione.\n\n'
         '$tripLine\n$timeLine';
@@ -143,7 +148,7 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
     _historyProvider = cfg.provider;
 
     final client = _buildClient(cfg);
-    final executor = AgentToolExecutor(_ref.read(tripProvider.notifier));
+    final executor = AgentToolExecutor(_ref);
 
     _add(ChatMsgKind.user, input);
     state = state.copyWith(busy: true);

@@ -8,7 +8,9 @@ import '../widgets/assistant_fab.dart';
 import '../widgets/item_tile.dart';
 import '../widgets/location_button.dart';
 import '../widgets/progress_bar.dart';
+import '../services/weather_service.dart';
 import 'day_edit_screen.dart';
+import 'day_map_screen.dart';
 import 'section_edit_screen.dart';
 
 class DayDetailScreen extends ConsumerWidget {
@@ -43,6 +45,15 @@ class DayDetailScreen extends ConsumerWidget {
           appBar: AppBar(
             title: Text('Dzień ${day.number}'),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.map_outlined),
+                tooltip: 'Mapa dnia',
+                onPressed: () {
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => DayMapScreen(dayId: day.id),
+                  ));
+                },
+              ),
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: 'Edytuj dzień',
@@ -84,6 +95,7 @@ class DayDetailScreen extends ConsumerWidget {
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     Text(day.summary, style: TextStyle(color: scheme.onSurfaceVariant)),
+                    _DayWeatherChip(day: day, dayIdx: dayIdx),
                     const SizedBox(height: 12),
                     Row(children: [
                       Expanded(child: DayProgressBar(value: progress)),
@@ -264,6 +276,75 @@ class DayDetailScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Chip z prognozą pogody dla dnia — widoczny, gdy ustawiono datę startu,
+/// data dnia mieści się w prognozie (16 dni) i dzień ma jakąś lokalizację.
+class _DayWeatherChip extends ConsumerWidget {
+  final Day day;
+  final int dayIdx;
+  const _DayWeatherChip({required this.day, required this.dayIdx});
+
+  IconData _icon(int code) {
+    if (code == 0) return Icons.wb_sunny_outlined;
+    if (code <= 3) return Icons.wb_cloudy_outlined;
+    if (code <= 48) return Icons.dehaze;
+    if (code <= 67) return Icons.water_drop_outlined;
+    if (code <= 77) return Icons.ac_unit;
+    if (code <= 86) return Icons.grain;
+    return Icons.thunderstorm_outlined;
+  }
+
+  Location? _dayLocation() {
+    for (final i in [...day.allItems, ...day.alternatives]) {
+      final loc = i.location ?? (i.locations.isNotEmpty ? i.locations.first : null);
+      if (loc != null) return loc;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final startDate = ref.watch(settingsProvider).tripStartDate;
+    if (startDate == null || dayIdx < 0) return const SizedBox.shrink();
+    final date = startDate.add(Duration(days: dayIdx));
+    final today = DateTime.now();
+    final today0 = DateTime(today.year, today.month, today.day);
+    if (date.isBefore(today0)) return const SizedBox.shrink();
+    final loc = _dayLocation();
+    if (loc == null) return const SizedBox.shrink();
+
+    return FutureBuilder<DayWeather?>(
+      future: WeatherService.forDate(loc.lat, loc.lng, date),
+      builder: (ctx, snap) {
+        final w = snap.data;
+        // Brak sieci / poza zakresem prognozy — chip po prostu znika.
+        if (w == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: scheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(_icon(w.weatherCode),
+                  size: 16, color: scheme.onSecondaryContainer),
+              const SizedBox(width: 6),
+              Text(
+                '${w.description} · ${w.tMin.round()}–${w.tMax.round()}°C'
+                '${w.precipProb > 20 ? ' · ☔ ${w.precipProb}%' : ''}',
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSecondaryContainer),
+              ),
+            ]),
+          ),
+        );
+      },
     );
   }
 }

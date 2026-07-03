@@ -268,6 +268,7 @@ class _AppDrawer extends ConsumerWidget {
             _entry(context, Icons.record_voice_over_outlined, label('conversations', 'Rozmówki EN'), '/conversations'),
             _entry(context, Icons.water_outlined, label('gorges', 'Wąwozy'), '/gorges'),
             _entry(context, Icons.phone_in_talk_outlined, label('emergency', 'Awaryjne'), '/emergency'),
+            _entry(context, Icons.auto_stories_outlined, label('journal', 'Dziennik podróży'), '/journal'),
             const Divider(),
             _entry(context, Icons.smart_toy_outlined, label('assistant', 'Asystent AI'), '/assistant'),
             _entry(context, Icons.library_books_outlined, label('library', 'Biblioteka planów'), '/library'),

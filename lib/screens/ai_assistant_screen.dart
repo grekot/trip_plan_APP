@@ -1,6 +1,9 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../providers/ai_providers.dart';
 
 /// Czat z asystentem AI modyfikującym plan podróży.
@@ -15,11 +18,62 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
+  // Rozpoznawanie mowy (pl_PL) — tylko Android/iOS.
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechReady = false;
+  bool _listening = false;
+
+  bool get _canUseVoice => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
   @override
   void dispose() {
+    if (_listening) _speech.stop();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleListen() async {
+    if (_listening) {
+      await _speech.stop();
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+    if (!_speechReady) {
+      _speechReady = await _speech.initialize(
+        onStatus: (status) {
+          // 'done' / 'notListening' — silnik sam kończy po pauzie w mówieniu.
+          if (status == 'done' || status == 'notListening') {
+            if (mounted) setState(() => _listening = false);
+          }
+        },
+        onError: (e) {
+          if (mounted) {
+            setState(() => _listening = false);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Rozpoznawanie mowy: ${e.errorMsg}')));
+          }
+        },
+      );
+      if (!_speechReady) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Rozpoznawanie mowy niedostępne — sprawdź uprawnienie do mikrofonu.')));
+        }
+        return;
+      }
+    }
+    setState(() => _listening = true);
+    await _speech.listen(
+      localeId: 'pl_PL',
+      listenOptions: stt.SpeechListenOptions(partialResults: true),
+      onResult: (result) {
+        // Podgląd na żywo w polu tekstowym; wysyłka dopiero po zatwierdzeniu
+        // przez użytkownika (przycisk wyślij) — bez auto-wysyłania.
+        setState(() => _inputCtrl.text = result.recognizedWords);
+      },
+    );
   }
 
   void _scrollToBottom() {
@@ -123,7 +177,22 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      if (_canUseVoice) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: _listening
+                              ? 'Zatrzymaj nagrywanie'
+                              : 'Podyktuj polecenie',
+                          onPressed: chat.busy ? null : _toggleListen,
+                          icon: Icon(
+                            _listening ? Icons.mic : Icons.mic_none,
+                            color: _listening
+                                ? Theme.of(context).colorScheme.error
+                                : null,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 4),
                       IconButton.filled(
                         onPressed: chat.busy ? null : _send,
                         icon: const Icon(Icons.send),

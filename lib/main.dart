@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'app_router.dart';
+import 'providers/journal_providers.dart';
 import 'providers/providers.dart';
 import 'theme.dart';
 
@@ -16,6 +17,7 @@ Future<void> main() async {
     Hive.openBox(boxNotes),
     Hive.openBox(boxPacking),
     Hive.openBox(boxSettings),
+    Hive.openBox(boxJournal),
   ]);
   runApp(const ProviderScope(child: SloweniaApp()));
 }
