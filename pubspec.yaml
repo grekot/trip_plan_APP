@@ -1,7 +1,7 @@
 name: slowenia_app
 description: Interaktywny plan wyjazdu do Słowenii 2026
 publish_to: 'none'
-version: 1.0.12+13
+version: 1.0.13+14
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -40,6 +40,9 @@ dependencies:
   speech_to_text: ^7.3.0
   # GPS do funkcji „jestem tutaj" w dzienniku podróży.
   geolocator: ^13.0.1
+  # Foreground service (Android): utrzymuje proces przy życiu, gdy agent AI
+  # pracuje, a użytkownik zrzuci apkę w tło (inaczej system zamraża sieć).
+  flutter_foreground_task: ^8.17.0
 
 dev_dependencies:
   flutter_lints: ^4.0.0

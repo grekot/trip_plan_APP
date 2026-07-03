@@ -66,8 +66,10 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
     }
     setState(() => _listening = true);
     await _speech.listen(
-      localeId: 'pl_PL',
-      listenOptions: stt.SpeechListenOptions(partialResults: true),
+      listenOptions: stt.SpeechListenOptions(
+        localeId: 'pl_PL',
+        partialResults: true,
+      ),
       onResult: (result) {
         // Podgląd na żywo w polu tekstowym; wysyłka dopiero po zatwierdzeniu
         // przez użytkownika (przycisk wyślij) — bez auto-wysyłania.

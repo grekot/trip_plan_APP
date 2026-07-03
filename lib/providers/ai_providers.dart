@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import '../services/plan_history_service.dart';
+import '../services/ai/agent_keepalive.dart';
 import '../services/ai/agent_tools.dart';
 import '../services/ai/ai_client.dart';
 import '../services/ai/ai_settings_store.dart';
@@ -54,7 +57,9 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
   /// zresetowania historii (formaty wiadomości są niekompatybilne).
   AiProvider? _historyProvider;
 
-  AiChatNotifier(this._ref) : super(const AiChatState());
+  AiChatNotifier(this._ref) : super(const AiChatState()) {
+    _restore();
+  }
 
   void _add(ChatMsgKind kind, String text) {
     state = state.copyWith(messages: [...state.messages, ChatMsg(kind, text)]);
@@ -64,6 +69,54 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
     _history.clear();
     _historyProvider = null;
     state = const AiChatState();
+    _persist();
+  }
+
+  // ===== Trwałość rozmowy (Hive) — rozmowa przeżywa ubicie procesu w tle =====
+
+  Box get _box => Hive.box(boxSettings);
+
+  void _persist() {
+    _box.put('aiChat.provider', _historyProvider?.name);
+    _box.put('aiChat.history', jsonEncode(_history));
+    _box.put(
+        'aiChat.messages',
+        jsonEncode([
+          for (final m in state.messages) {'k': m.kind.name, 't': m.text},
+        ]));
+  }
+
+  void _restore() {
+    try {
+      final providerName = _box.get('aiChat.provider') as String?;
+      final historyJson = _box.get('aiChat.history') as String?;
+      final messagesJson = _box.get('aiChat.messages') as String?;
+      if (providerName == null || historyJson == null || messagesJson == null) {
+        return;
+      }
+      _historyProvider = AiProvider.fromString(providerName);
+      _history
+        ..clear()
+        ..addAll((jsonDecode(historyJson) as List)
+            .map((e) => (e as Map).cast<String, dynamic>()));
+      final msgs = (jsonDecode(messagesJson) as List)
+          .map((e) => (e as Map).cast<String, dynamic>())
+          .map((m) => ChatMsg(
+                ChatMsgKind.values.firstWhere(
+                  (k) => k.name == m['k'],
+                  orElse: () => ChatMsgKind.info,
+                ),
+                m['t'] as String? ?? '',
+              ))
+          .toList();
+      if (msgs.isNotEmpty) {
+        state = AiChatState(messages: msgs);
+      }
+    } catch (_) {
+      // Uszkodzony stan — zaczynamy od pustej rozmowy.
+      _history.clear();
+      _historyProvider = null;
+    }
   }
 
   AiClient _buildClient(AiConfig cfg) {
@@ -158,6 +211,10 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
     final checkpoint = _history.length;
     _history.add(client.buildUserMessage(input));
 
+    // Android: powiadomienie foreground service — system nie zamrozi procesu
+    // ani nie zerwie połączenia, gdy użytkownik zrzuci apkę w tło.
+    await AgentKeepalive.start();
+
     try {
       var finished = false;
       var snapshotDone = false;
@@ -215,7 +272,9 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
     } catch (e) {
       _add(ChatMsgKind.error, 'Nieoczekiwany błąd: $e');
     } finally {
+      await AgentKeepalive.stop();
       state = state.copyWith(busy: false);
+      _persist();
     }
   }
 }
