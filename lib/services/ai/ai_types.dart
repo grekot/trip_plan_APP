@@ -3,7 +3,8 @@
 /// Dostawca usług AI.
 enum AiProvider {
   anthropic,
-  deepseek;
+  deepseek,
+  gemini;
 
   static AiProvider fromString(String? s) => AiProvider.values.firstWhere(
         (e) => e.name == s,
@@ -16,6 +17,8 @@ enum AiProvider {
         return 'Claude (Anthropic)';
       case AiProvider.deepseek:
         return 'DeepSeek';
+      case AiProvider.gemini:
+        return 'Gemini (Google)';
     }
   }
 
@@ -26,6 +29,8 @@ enum AiProvider {
         return 'claude-opus-4-8';
       case AiProvider.deepseek:
         return 'deepseek-chat';
+      case AiProvider.gemini:
+        return 'gemini-2.5-flash';
     }
   }
 }

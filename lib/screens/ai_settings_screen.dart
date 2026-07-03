@@ -6,7 +6,7 @@ import '../providers/ai_providers.dart';
 import '../services/ai/ai_settings_store.dart';
 import '../services/ai/ai_types.dart';
 import '../services/ai/anthropic_client.dart';
-import '../services/ai/deepseek_client.dart';
+import '../services/ai/openai_compat_client.dart';
 import '../services/ai/model_catalog.dart';
 import 'qr_scan_screen.dart';
 
@@ -139,7 +139,9 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
         AiProvider.anthropic =>
             AnthropicClient(apiKey: cfg.apiKey, model: cfg.model),
         AiProvider.deepseek =>
-            DeepseekClient(apiKey: cfg.apiKey, model: cfg.model),
+            OpenAiCompatClient.deepseek(apiKey: cfg.apiKey, model: cfg.model),
+        AiProvider.gemini =>
+            OpenAiCompatClient.gemini(apiKey: cfg.apiKey, model: cfg.model),
       };
       final turn = await client.send(
         system: 'Odpowiedz jednym słowem: OK',
@@ -204,9 +206,11 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                   enableSuggestions: false,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
-                    hintText: _provider == AiProvider.anthropic
-                        ? 'sk-ant-…'
-                        : 'sk-…',
+                    hintText: switch (_provider) {
+                      AiProvider.anthropic => 'sk-ant-…',
+                      AiProvider.deepseek => 'sk-…',
+                      AiProvider.gemini => 'AIza…',
+                    },
                     suffixIcon: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -229,9 +233,14 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  (_provider == AiProvider.anthropic
-                          ? 'Klucz wygenerujesz na platform.claude.com (Console → API Keys).'
-                          : 'Klucz wygenerujesz na platform.deepseek.com (API Keys).') +
+                  switch (_provider) {
+                        AiProvider.anthropic =>
+                          'Klucz wygenerujesz na platform.claude.com (Console → API Keys).',
+                        AiProvider.deepseek =>
+                          'Klucz wygenerujesz na platform.deepseek.com (API Keys).',
+                        AiProvider.gemini =>
+                          'Klucz wygenerujesz na aistudio.google.com (Get API key).',
+                      } +
                       (_canScanQr
                           ? ' Możesz też zeskanować kod QR z kluczem (ikona przy polu).'
                           : ''),

@@ -16,6 +16,10 @@ class ModelCatalog {
       'deepseek-chat': 'zalecany (domyślny)',
       'deepseek-reasoner': 'rozumujący (wolniejszy)',
     },
+    AiProvider.gemini: {
+      'gemini-2.5-flash': 'szybki (domyślny)',
+      'gemini-2.5-pro': 'najmocniejszy',
+    },
   };
 
   /// Pobiera listę ID modeli z API dostawcy.
@@ -32,6 +36,11 @@ class ModelCatalog {
         break;
       case AiProvider.deepseek:
         uri = Uri.parse('https://api.deepseek.com/models');
+        headers = {'authorization': 'Bearer $apiKey'};
+        break;
+      case AiProvider.gemini:
+        uri = Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/openai/models');
         headers = {'authorization': 'Bearer $apiKey'};
         break;
     }
@@ -51,10 +60,18 @@ class ModelCatalog {
 
     final j = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
     final data = (j['data'] as List? ?? []);
-    final ids = <String>[
+    var ids = <String>[
       for (final m in data)
         if ((m as Map)['id'] is String) m['id'] as String,
     ];
+    if (provider == AiProvider.gemini) {
+      // Gemini zwraca ID z prefiksem "models/" i miesza modele embeddingowe —
+      // zostawiamy same modele czatowe gemini-*.
+      ids = ids
+          .map((id) => id.startsWith('models/') ? id.substring(7) : id)
+          .where((id) => id.startsWith('gemini'))
+          .toList();
+    }
     if (ids.isEmpty) {
       throw const AiException('Dostawca zwrócił pustą listę modeli.');
     }

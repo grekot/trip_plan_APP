@@ -9,7 +9,7 @@ import '../services/ai/ai_client.dart';
 import '../services/ai/ai_settings_store.dart';
 import '../services/ai/ai_types.dart';
 import '../services/ai/anthropic_client.dart';
-import '../services/ai/deepseek_client.dart';
+import '../services/ai/openai_compat_client.dart';
 import 'providers.dart';
 
 /// Czy asystent jest skonfigurowany (jest klucz API dla wybranego dostawcy)?
@@ -124,7 +124,9 @@ class AiChatNotifier extends StateNotifier<AiChatState> {
       case AiProvider.anthropic:
         return AnthropicClient(apiKey: cfg.apiKey, model: cfg.model);
       case AiProvider.deepseek:
-        return DeepseekClient(apiKey: cfg.apiKey, model: cfg.model);
+        return OpenAiCompatClient.deepseek(apiKey: cfg.apiKey, model: cfg.model);
+      case AiProvider.gemini:
+        return OpenAiCompatClient.gemini(apiKey: cfg.apiKey, model: cfg.model);
     }
   }
 

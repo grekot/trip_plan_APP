@@ -3,23 +3,33 @@ import 'package:http/http.dart' as http;
 import 'ai_client.dart';
 import 'ai_types.dart';
 
-/// Klient DeepSeek — API zgodne z formatem OpenAI (chat/completions,
-/// function calling). https://api-docs.deepseek.com
+/// Wspólny klient dla dostawców z API zgodnym z formatem OpenAI
+/// (chat/completions + function calling): DeepSeek i Gemini.
 ///
 /// - narzędzia: `tools: [{type: "function", function: {...}}]`
 /// - odpowiedź: `choices[0].message` z opcjonalnym `tool_calls`
 /// - wyniki narzędzi: osobne wiadomości `role: "tool"` z `tool_call_id`
-class DeepseekClient implements AiClient {
-  static const _endpoint = 'https://api.deepseek.com/chat/completions';
+class OpenAiCompatClient implements AiClient {
   static const _timeout = Duration(seconds: 180);
 
+  @override
+  final AiProvider provider;
+  final String endpoint;
+  final String providerLabel;
   final String apiKey;
   final String model;
 
-  DeepseekClient({required this.apiKey, required this.model});
+  OpenAiCompatClient.deepseek({required this.apiKey, required this.model})
+      : provider = AiProvider.deepseek,
+        endpoint = 'https://api.deepseek.com/chat/completions',
+        providerLabel = 'DeepSeek';
 
-  @override
-  AiProvider get provider => AiProvider.deepseek;
+  /// Gemini przez warstwę zgodności OpenAI (generativelanguage.googleapis.com).
+  OpenAiCompatClient.gemini({required this.apiKey, required this.model})
+      : provider = AiProvider.gemini,
+        endpoint =
+            'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+        providerLabel = 'Gemini';
 
   @override
   Map<String, dynamic> buildUserMessage(String text) =>
@@ -77,7 +87,7 @@ class DeepseekClient implements AiClient {
     try {
       resp = await http
           .post(
-            Uri.parse(_endpoint),
+            Uri.parse(endpoint),
             headers: {
               'content-type': 'application/json',
               'authorization': 'Bearer $apiKey',
@@ -86,7 +96,7 @@ class DeepseekClient implements AiClient {
           )
           .timeout(_timeout);
     } catch (e) {
-      throw AiException('Brak połączenia z DeepSeek API: $e');
+      throw AiException('Brak połączenia z $providerLabel API: $e');
     }
 
     if (resp.statusCode != 200) {
@@ -96,7 +106,7 @@ class DeepseekClient implements AiClient {
     final j = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
     final choices = j['choices'] as List? ?? [];
     if (choices.isEmpty) {
-      throw const AiException('DeepSeek zwrócił pustą odpowiedź.');
+      throw AiException('$providerLabel zwrócił pustą odpowiedź.');
     }
     final choice = (choices.first as Map).cast<String, dynamic>();
     final message = (choice['message'] as Map).cast<String, dynamic>();
@@ -132,17 +142,25 @@ class DeepseekClient implements AiClient {
     String detail = '';
     try {
       final j = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
-      detail = ((j['error'] as Map?)?['message'] as String?) ?? '';
+      final err = j['error'];
+      if (err is Map) detail = (err['message'] as String?) ?? '';
     } catch (_) {}
     switch (resp.statusCode) {
+      case 400:
+        return detail.toLowerCase().contains('api key')
+            ? 'Nieprawidłowy klucz API $providerLabel. Sprawdź go w ustawieniach asystenta.'
+            : 'Błąd $providerLabel API (400): $detail';
       case 401:
-        return 'Nieprawidłowy klucz API DeepSeek. Sprawdź go w ustawieniach asystenta.';
+      case 403:
+        return 'Nieprawidłowy klucz API $providerLabel. Sprawdź go w ustawieniach asystenta.';
       case 402:
-        return 'Brak środków na koncie DeepSeek (doładuj konto na platform.deepseek.com).';
+        return 'Brak środków na koncie $providerLabel — doładuj konto.';
+      case 404:
+        return 'Nieznany model "$model" u dostawcy $providerLabel. $detail';
       case 429:
-        return 'Przekroczony limit zapytań DeepSeek — spróbuj za chwilę.';
+        return 'Przekroczony limit zapytań $providerLabel — spróbuj za chwilę.';
       default:
-        return 'Błąd DeepSeek API (${resp.statusCode}): $detail';
+        return 'Błąd $providerLabel API (${resp.statusCode}): $detail';
     }
   }
 }
