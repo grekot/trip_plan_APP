@@ -63,6 +63,11 @@ class PlanLibraryNotifier extends StateNotifier<AsyncValue<PlanLibraryState>> {
     final id = await PlanLibraryService.download(e, passphrase);
     if (activate || TripLoader.activePlanId() == null) {
       await TripLoader.setActivePlanId(id);
+    }
+    // KLUCZOWE: gdy pobrany plan jest (lub właśnie został) planem AKTYWNYM,
+    // przeładuj go z dysku. Bez tego apka trzyma w pamięci starą wersję,
+    // a pierwsza edycja nadpisuje świeżo pobrany plik starą treścią.
+    if (TripLoader.activePlanId() == id) {
       await ref.read(tripProvider.notifier).reload();
     }
     await refresh();
