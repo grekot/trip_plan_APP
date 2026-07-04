@@ -11,8 +11,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/trip_loader.dart';
 import '../providers/providers.dart';
+import '../services/github_token_store.dart';
+import '../services/passphrase_store.dart';
 import '../services/plan_history_service.dart';
+import '../services/plan_push_service.dart';
 import '../widgets/update_dialog.dart';
+import 'qr_scan_screen.dart';
 
 bool get _isDesktop {
   if (kIsWeb) return false;
@@ -73,6 +77,17 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Importuj plan z pliku'),
             subtitle: const Text('Wczytaj JSON z dysku telefonu'),
             onTap: () => _importTrip(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.cloud_upload_outlined),
+            title: const Text('Wyślij plan do chmury (GitHub)'),
+            subtitle: const Text('Zaszyfruj i wypchnij do repo trip_plans — do pobrania na PC'),
+            trailing: IconButton(
+              tooltip: 'Token GitHub',
+              icon: const Icon(Icons.key_outlined),
+              onPressed: () => _githubTokenDialog(context),
+            ),
+            onTap: () => _pushTrip(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.history),
@@ -243,6 +258,158 @@ class SettingsScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) _toast(context, 'Błąd: $e');
     }
+  }
+
+  /// Wysyła aktywny plan (zaszyfrowany) do repo trip_plans na GitHubie.
+  Future<void> _pushTrip(BuildContext context, WidgetRef ref) async {
+    final trip = ref.read(tripProvider).valueOrNull;
+    final planId = TripLoader.activePlanId();
+    if (trip == null || planId == null) {
+      _toast(context, 'Brak aktywnego planu do wysłania.');
+      return;
+    }
+    final passphrase = await PassphraseStore.get();
+    if (passphrase == null || passphrase.isEmpty) {
+      if (context.mounted) {
+        _toast(context, 'Najpierw ustaw hasło planów (Biblioteka planów).');
+      }
+      return;
+    }
+    var token = await GithubTokenStore.get();
+    if ((token == null || token.isEmpty) && context.mounted) {
+      token = await _githubTokenDialog(context);
+    }
+    if (token == null || token.isEmpty) return;
+    if (!context.mounted) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Wysłać plan do chmury?'),
+        content: Text(
+            'Plan „${trip.title}” zostanie zaszyfrowany i wypchnięty do repo '
+            'trip_plans na GitHubie — NADPISZE wersję w chmurze.\n\n'
+            'Na komputerze: git pull w repo, potem\n'
+            'dart run tool/encrypt_plan.dart dec …'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Anuluj')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Wyślij')),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    // Dialog postępu (zamykany programowo po zakończeniu).
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 16),
+          Expanded(child: Text('Szyfruję i wysyłam plan…')),
+        ]),
+      ),
+    );
+    try {
+      final file = await PlanPushService.push(
+        trip: trip,
+        planId: planId,
+        passphrase: passphrase,
+        token: token,
+      );
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // zamknij postęp
+        _toast(context, 'Wysłano do chmury: $file ✓');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        _toast(context, 'Błąd wysyłki: $e');
+      }
+    }
+  }
+
+  /// Dialog ustawiania tokenu GitHub (fine-grained PAT). Zwraca zapisany
+  /// token albo null (anulowano/wyczyszczono).
+  Future<String?> _githubTokenDialog(BuildContext context) async {
+    final ctl = TextEditingController(text: await GithubTokenStore.get() ?? '');
+    if (!context.mounted) return null;
+    final canScan = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    return showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Token GitHub (wysyłka planów)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Fine-grained PAT z uprawnieniem Contents (Read and write) '
+              'TYLKO do repo grekot/trip_plans.\n'
+              'github.com → Settings → Developer settings → Tokens.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctl,
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                hintText: 'github_pat_…',
+                border: const OutlineInputBorder(),
+                suffixIcon: canScan
+                    ? IconButton(
+                        tooltip: 'Skanuj kod QR z tokenem',
+                        icon: const Icon(Icons.qr_code_scanner),
+                        onPressed: () async {
+                          final scanned =
+                              await Navigator.of(ctx).push<String>(
+                            MaterialPageRoute(
+                              builder: (_) => const QrScanScreen(
+                                title: 'Skanuj kod QR z tokenem',
+                                hint: 'Skieruj aparat na kod QR z tokenem GitHub',
+                              ),
+                            ),
+                          );
+                          if (scanned != null && scanned.trim().isNotEmpty) {
+                            ctl.text = scanned.trim();
+                          }
+                        },
+                      )
+                    : null,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await GithubTokenStore.clear();
+              if (ctx.mounted) Navigator.pop(ctx, null);
+            },
+            child: const Text('Wyczyść'),
+          ),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Anuluj')),
+          FilledButton(
+            onPressed: () async {
+              final t = ctl.text.trim();
+              if (t.isEmpty) return;
+              await GithubTokenStore.set(t);
+              if (ctx.mounted) Navigator.pop(ctx, t);
+            },
+            child: const Text('Zapisz'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmResetProgress(BuildContext context, WidgetRef ref) async {
